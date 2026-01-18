@@ -332,6 +332,9 @@ fn generate_response_wait_logic(
         if !mycelium_computing::core::qos::wait_for_writer_match(&self.#writer_ident, match_timeout).await {
             return None;
         }
+        if !mycelium_computing::core::qos::wait_for_reader_match(&self.#reader_ident, match_timeout).await {
+            return None;
+        }
 
         let (sender, receiver) = dust_dds::dcps::channels::oneshot::oneshot::<#output_type>();
 

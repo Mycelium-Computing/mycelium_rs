@@ -71,16 +71,18 @@ mod tests {
                     request,
                     dust_dds::dcps::infrastructure::time::Duration::new(2, 0),
                 )
-                .await
-                .unwrap();
+                .await;
 
-            return result.value;
+            if let Some(data) = result {
+                return data.value;
+            }
+            return -1.0;
         }
 
         let value = smol::block_on(async {
             mycelium_computing::futures::select! {
                 res = test_consumer().fuse() => res,
-                _ = Timer::after(Duration::new(3, 0)).fuse() => -1.0,
+                _ = Timer::after(Duration::new(1, 0)).fuse() => -1.0,
             }
         });
 

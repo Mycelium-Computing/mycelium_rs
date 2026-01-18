@@ -36,7 +36,7 @@ mod tests {
     use std::time::Duration;
 
     use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
-    use mycelium_computing::core::application::Application;
+    use mycelium_computing::core::module::Module;
     use smol::Timer;
 
     use crate::{
@@ -48,7 +48,7 @@ mod tests {
         let handle = std::thread::spawn(|| {
             smol::block_on(async {
                 let participant_factory = DomainParticipantFactoryAsync::get_instance();
-                let mut app = Application::new(150, "test_application", participant_factory).await;
+                let mut app = Module::new(150, "test_application", participant_factory).await;
                 app.register_provider::<CalculatorProvider>().await;
 
                 Timer::after(Duration::new(2, 0)).await;

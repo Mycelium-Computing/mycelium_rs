@@ -23,7 +23,7 @@ Mycelium Computing enables developers to create distributed systems with minimal
 modular_architecture/
 ├── core/                    # Main library (mycelium_computing)
 │   └── src/
-│       ├── core/           # Application, listeners, and messages
+│       ├── core/           # Module, listeners, and messages
 │       └── utils/          # Utilities (ID generator, storage)
 ├── macros/                  # Procedural macros library
 │   └── src/
@@ -113,15 +113,15 @@ impl CalculatorConsumerContinuosTrait for CalculatorConsumer {
 
 ### Running Provider and Consumer
 
-**Provider Application:**
+**Provider Module:**
 
 ```rust
 use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
-use mycelium_computing::core::application::Application;
+use mycelium_computing::core::module::Module;
 
 async fn run_provider() {
     let factory = DomainParticipantFactoryAsync::get_instance();
-    let mut app = Application::new(0, "CalculatorService", factory).await;
+    let mut app = Module::new(0, "CalculatorService", factory).await;
     
     // Register provider and get handle for continuous data
     let continuous_handle = app.register_provider::<CalculatorProvider>().await;
@@ -134,7 +134,7 @@ async fn run_provider() {
 }
 ```
 
-**Consumer Application:**
+**Consumer Module:**
 
 ```rust
 async fn run_consumer() {
@@ -214,7 +214,7 @@ The framework follows a provider-consumer architecture built on DDS:
 ```
 
 Key components:
-- **Application**: Manages DDS participants, publishers, and subscribers
+- **Module**: Manages DDS participants, publishers, and subscribers
 - **ProviderTrait**: Generated trait that providers must implement
 - **Proxy**: Generated struct for consumers to interact with providers
 - **Listeners**: Handle incoming messages and route to implementations

@@ -1,12 +1,12 @@
 pub mod consumer;
 pub mod provider;
 
-use crate::core::application::provider::ProviderTrait;
 use crate::core::listener::{
     NoOpDataReaderListener, NoOpDataWriterListener, NoOpParticipantListener, NoOpPublisherListener,
     NoOpSubscriberListener, NoOpTopicListener,
 };
 use crate::core::messages::{ConsumerDiscovery, ProviderMessage};
+use crate::core::module::provider::ProviderTrait;
 use crate::utils::storage::ExecutionObjects;
 use dust_dds::dds_async::data_reader::DataReaderAsync;
 use dust_dds::dds_async::data_writer::DataWriterAsync;
@@ -18,7 +18,7 @@ use dust_dds::infrastructure::qos::QosKind;
 use dust_dds::infrastructure::status::{NO_STATUS, StatusKind};
 use dust_dds::runtime::DdsRuntime;
 
-pub struct Application {
+pub struct Module {
     name: String,
     pub participant: DomainParticipantAsync,
     pub publisher: PublisherAsync,
@@ -29,7 +29,7 @@ pub struct Application {
     objects_storage: ExecutionObjects,
 }
 
-impl Application {
+impl Module {
     pub async fn run_forever(&self) {
         println!("{} is waiting forever", self.name);
         core::future::pending::<()>().await;
@@ -137,7 +137,7 @@ impl Application {
 
         let objects_storage = ExecutionObjects::new();
 
-        Application {
+        Module {
             name: name.to_string(),
             participant,
             publisher,

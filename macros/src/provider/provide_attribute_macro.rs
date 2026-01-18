@@ -128,13 +128,13 @@ fn get_create_continuous_handle_impl_tokens(
     if continuous_funcs.is_empty() {
         // No continuous functionalities - return NoContinuousHandle
         return quote! {
-            type ContinuousHandle = mycelium_computing::core::application::provider::NoContinuousHandle;
+            type ContinuousHandle = mycelium_computing::core::module::provider::NoContinuousHandle;
 
             async fn create_continuous_handle(
                 _participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
                 _publisher: &dust_dds::dds_async::publisher::PublisherAsync,
             ) -> Self::ContinuousHandle {
-                mycelium_computing::core::application::provider::NoContinuousHandle
+                mycelium_computing::core::module::provider::NoContinuousHandle
             }
         };
     }
@@ -424,7 +424,7 @@ fn get_provider_impl_tokens(
         get_create_continuous_handle_impl_tokens(provider_name, functionalities);
 
     quote::quote! {
-        impl mycelium_computing::core::application::provider::ProviderTrait for #provider_name {
+        impl mycelium_computing::core::module::provider::ProviderTrait for #provider_name {
             #continuous_handle_impl
 
             fn get_functionalities() -> mycelium_computing::core::messages::ProviderMessage {

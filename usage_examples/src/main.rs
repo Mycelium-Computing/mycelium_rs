@@ -2,7 +2,7 @@ mod example_messages;
 
 use crate::example_messages::face_recognition::*;
 use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
-use mycelium_computing::core::application::Application;
+use mycelium_computing::core::module::Module;
 use mycelium_computing::{consumes, provides};
 use std::env;
 
@@ -47,7 +47,7 @@ impl FaceRecognitionProxyContinuosTrait for FaceRecognitionProxy {
 
 async fn provider() {
     let factory = DomainParticipantFactoryAsync::get_instance();
-    let mut app = Application::new(0, "JustASumService", factory).await;
+    let mut app = Module::new(0, "JustASumService", factory).await;
 
     app.register_provider::<FaceRecognition>().await;
 

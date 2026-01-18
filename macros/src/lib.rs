@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 mod common;
 mod consumer;
 mod naming;

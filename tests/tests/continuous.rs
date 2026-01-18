@@ -54,6 +54,7 @@ mod tests {
 
         let continuous_handle = application.register_provider::<NumberGenerator>().await;
 
+        // This delay is intended as the continuous data should be discarded if not listened.
         Timer::after(Duration::from_millis(500)).await;
 
         continuous_handle.integer(Number { value: 1 }).await;
@@ -65,48 +66,19 @@ mod tests {
 
     async fn consumer_application() {
         let factory = DomainParticipantFactoryAsync::get_instance();
+        let mut app = Module::new(150, "test_consumer", factory).await;
 
-        let participant = factory
-            .create_participant(
-                150,
-                dust_dds::infrastructure::qos::QosKind::Default,
-                dust_dds::listener::NO_LISTENER,
-                dust_dds::infrastructure::status::NO_STATUS,
-            )
-            .await
-            .unwrap();
-
-        let subscriber = participant
-            .create_subscriber(
-                dust_dds::infrastructure::qos::QosKind::Default,
-                dust_dds::listener::NO_LISTENER,
-                dust_dds::infrastructure::status::NO_STATUS,
-            )
-            .await
-            .unwrap();
-
-        let publisher = participant
-            .create_publisher(
-                dust_dds::infrastructure::qos::QosKind::Default,
-                dust_dds::listener::NO_LISTENER,
-                dust_dds::infrastructure::status::NO_STATUS,
-            )
-            .await
-            .unwrap();
-
-        let _ = NumberReceiver::init(&participant, &subscriber, &publisher).await;
+        let _ = app.register_consumer::<NumberReceiver>().await;
         Timer::after(Duration::from_secs(2)).await;
     }
 
     async fn test_number_generator_and_receiver() {
-        let provider = std::thread::spawn(move || {
-            smol::block_on(provider_application());
-        });
         let consumer = std::thread::spawn(|| {
             smol::block_on(consumer_application());
         });
-
-        Timer::after(Duration::from_secs(1)).await;
+        let provider = std::thread::spawn(move || {
+            smol::block_on(provider_application());
+        });
 
         provider.join().unwrap();
         consumer.join().unwrap();

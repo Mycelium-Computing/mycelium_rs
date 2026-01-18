@@ -328,6 +328,11 @@ fn generate_response_wait_logic(
     output_type: &Type,
 ) -> proc_macro2::TokenStream {
     quote! {
+        let match_timeout = core::time::Duration::new(timeout.sec() as u64, timeout.nanosec());
+        if !mycelium_computing::core::qos::wait_for_writer_match(&self.#writer_ident, match_timeout).await {
+            return None;
+        }
+
         let (sender, receiver) = dust_dds::dcps::channels::oneshot::oneshot::<#output_type>();
 
         let listener = mycelium_computing::core::listener::ProviderResponseListener {
@@ -510,7 +515,7 @@ fn get_init_body_writers(funtionalities: &Functionalities) -> Vec<proc_macro2::T
                     let #writer_ident = publisher
                         .create_datawriter::<mycelium_computing::core::messages::ProviderExchange<#input_type>>(
                             &#req_topic_var_ident,
-                            dust_dds::infrastructure::qos::QosKind::Default,
+                            dust_dds::infrastructure::qos::QosKind::Specific(mycelium_computing::core::qos::reliable_writer_qos()),
                             dust_dds::listener::NO_LISTENER,
                             dust_dds::infrastructure::status::NO_STATUS,
                         )
@@ -538,7 +543,7 @@ fn get_init_body_readers(functionalities: &Functionalities) -> Vec<proc_macro2::
                     let #reader_ident = subscriber
                         .create_datareader::<mycelium_computing::core::messages::ProviderExchange<#output_type>>(
                             &#res_topic_var_ident,
-                            dust_dds::infrastructure::qos::QosKind::Default,
+                            dust_dds::infrastructure::qos::QosKind::Specific(mycelium_computing::core::qos::reliable_reader_qos()),
                             dust_dds::listener::NO_LISTENER,
                             dust_dds::infrastructure::status::NO_STATUS,
                         )
@@ -602,6 +607,73 @@ fn get_struct_init_fields(functionalities: &Functionalities) -> Vec<proc_macro2:
         .collect()
 }
 
+fn get_consumer_trait_impl(
+    struct_name: &Ident,
+    functionalities: &Functionalities,
+    consumer_struct_name: &Ident,
+) -> proc_macro2::TokenStream {
+    let struct_name_str = struct_name.to_string();
+
+    let functionality_definitions: Vec<_> = functionalities
+        .functionalities
+        .iter()
+        .map(|f| {
+            let name_str = f.name.to_string();
+            let input_type_str = f
+                .input_type
+                .as_ref()
+                .map(|t| quote!(#t).to_string())
+                .unwrap_or_default();
+            let output_type = &f.output_type;
+            let output_type_str = quote!(#output_type).to_string();
+
+            quote! {
+                mycelium_computing::core::messages::ProvidedFunctionality {
+                    name: #name_str.to_string(),
+                    input_type: #input_type_str.to_string(),
+                    output_type: #output_type_str.to_string(),
+                }
+            }
+        })
+        .collect();
+
+    let data_topics_instantiations = get_functionalities_topics_instantiations(functionalities);
+    let init_body_writers = get_init_body_writers(functionalities);
+    let init_body_readers = get_init_body_readers(functionalities);
+    let init_body_continuous = get_init_body_continuous(functionalities);
+    let struct_init_fields = get_struct_init_fields(functionalities);
+
+    quote! {
+        impl mycelium_computing::core::module::consumer::ConsumerTrait for #struct_name {
+            type Handle = #consumer_struct_name;
+
+            fn get_consumer_id() -> String {
+                #struct_name_str.to_string()
+            }
+
+            fn get_requested_functionalities() -> Vec<mycelium_computing::core::messages::ProvidedFunctionality> {
+                vec![#(#functionality_definitions),*]
+            }
+
+            async fn create_handle(
+                participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
+                publisher: &dust_dds::dds_async::publisher::PublisherAsync,
+                subscriber: &dust_dds::dds_async::subscriber::SubscriberAsync,
+            ) -> Self::Handle {
+                #(#data_topics_instantiations)*
+
+                #(#init_body_writers)*
+                #(#init_body_readers)*
+                #(#init_body_continuous)*
+
+                #consumer_struct_name {
+                    #(#struct_init_fields),*
+                }
+            }
+        }
+    }
+}
+
 #[inline(always)]
 fn get_consumer_struct_impl(
     struct_name: &Ident,
@@ -652,6 +724,9 @@ pub fn apply_consume_attribute_macro(
     let consumer_struct_impl =
         get_consumer_struct_impl(struct_name, functionalities, &consumer_struct_name);
 
+    let consumer_trait_impl =
+        get_consumer_trait_impl(struct_name, functionalities, &consumer_struct_name);
+
     let expanded = quote::quote! {
         struct #struct_name;
 
@@ -664,6 +739,8 @@ pub fn apply_consume_attribute_macro(
         #(#trait_implementations)*
 
         #consumer_struct_impl
+
+        #consumer_trait_impl
     };
 
     TokenStream::from(expanded)

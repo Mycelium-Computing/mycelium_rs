@@ -1,0 +1,82 @@
+@startuml
+skinparam ParticipantPadding 10
+skinparam BoxPadding 10
+autonumber
+
+box "Consumer Node" #LightBlue
+    participant "App: Consumer" as C
+    participant "Consumer Handle" as CH
+    participant "DDS: Middleware" as C_DDS
+end box
+
+box "Network (Multicast)" #LightGray
+    queue "Meta-Traffic\n(Discovery)" as NET_META
+    queue "User-Traffic\n(Topics)" as NET_USER
+end box
+
+box "Provider Node" #LightYellow
+    participant "DDS: Middleware" as P_DDS
+    participant "App: Provider" as P
+end box
+
+== Step 1: Initialization (Simultaneous, Non-Blocking) ==
+par
+    C -> C_DDS: Create Participant
+    C -> C_DDS: Create Reader/Writer
+    C_DDS -> NET_META: Multicast: "I have Reader/Writer"
+    C -> C: register_consumer()
+    C -> C_DDS: Write(ConsumerDiscovery)
+    C -> C: create_handle()
+    note right of C: Handle created immediately.\nNo waiting for providers.
+    C --> CH: Return Handle
+else
+    P -> P_DDS: Create Participant
+    P -> P_DDS: Create Writer (ProviderRegistration)
+    P_DDS -> NET_META: Multicast: "I am a Writer for 'ProviderRegistration'"
+
+    P -> P: register_provider()
+    P -> P_DDS: Write(ProviderMessage)
+    note right of P_DDS: Data is stored in Writer Cache.\nNOT sent yet (no known readers).
+end
+
+== Step 2: Consumer Makes Request (Waiting Happens Here) ==
+C -> CH: request(data, timeout)
+activate CH
+CH -> CH: wait_for_writer_match(timeout)
+note right of CH: Waiting for provider match\nwithin the given timeout.
+
+== Step 3: Infrastructure Handshake (SEDP) ==
+note over NET_META: Discovery messages cross on the network
+
+C_DDS <- NET_META: Receives "I am a Writer"
+P_DDS <- NET_META: Receives "I am a Reader"
+
+C_DDS -> C_DDS: Check QoS Compatibility\n(Topic Name + Type + QoS)
+P_DDS -> P_DDS: Check QoS Compatibility\n(Topic Name + Type + QoS)
+
+note over C_DDS, P_DDS: **MATCH ESTABLISHED**\nThe middleware now creates the route.
+
+== Step 4: Data Delivery (Resolution) ==
+P_DDS -> P_DDS: Detects new matched Reader (Consumer)
+P_DDS -> P_DDS: Checks History Cache
+note right of P_DDS: Finds the 'ProviderMessage' \nthat was written in Step 1.
+
+C_DDS -> CH: Writer matched!
+note right of CH: wait_for_writer_match returns true
+
+CH -> C_DDS: Write(Request)
+C_DDS -> NET_USER: Publish Request
+NET_USER -> P_DDS: Receives Request
+
+P_DDS -> P: **on_data_available()**
+P -> P: Handle Request
+P -> P_DDS: Write(Response)
+P_DDS -> NET_USER: Publish Response
+NET_USER -> C_DDS: Receives Response
+
+C_DDS -> CH: **on_data_available()**
+CH -> CH: read() -> Gets Response
+CH --> C: Return Response
+deactivate CH
+
+@enduml

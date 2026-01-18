@@ -336,7 +336,7 @@ fn get_functionality_channel_tokens(
     let writer_tokens = quote! {
         let writer = publisher.create_datawriter::<mycelium_computing::core::messages::ProviderExchange<#output_type>>(
             &response_topic,
-            dust_dds::infrastructure::qos::QosKind::Default,
+            dust_dds::infrastructure::qos::QosKind::Specific(mycelium_computing::core::qos::reliable_writer_qos()),
             None::<mycelium_computing::core::listener::NoOpDataWriterListener>,
             dust_dds::infrastructure::status::NO_STATUS
         )
@@ -365,7 +365,7 @@ fn get_functionality_channel_tokens(
 
         let reader = subscriber.create_datareader::<mycelium_computing::core::messages::ProviderExchange<#input_type>>(
             &request_topic,
-            dust_dds::infrastructure::qos::QosKind::Default,
+            dust_dds::infrastructure::qos::QosKind::Specific(mycelium_computing::core::qos::reliable_reader_qos()),
             Some(listener),
             &[dust_dds::infrastructure::status::StatusKind::DataAvailable]
         )

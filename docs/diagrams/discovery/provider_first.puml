@@ -1,0 +1,62 @@
+@startuml
+skinparam ParticipantPadding 20
+skinparam BoxPadding 10
+
+box "Node A" #LightBlue
+    participant "Consumer Module" as C
+    participant "Consumer Handle" as CH
+    participant "Consumer Reader" as CR
+    participant "Consumer Writer" as CW
+end box
+
+box "DDS Domain (Network)" #LightGray
+    queue "Topic: ConsumerDiscovery" as T_CD
+    queue "Topic: ProviderRegistration" as T_PR
+    queue "Topic: Request/Response" as T_RR
+end box
+
+box "Node B" #LightYellow
+    participant "Provider Module" as P
+    participant "Provider Writer" as PW
+    participant "Provider Reader" as PR
+end box
+
+== Phase 1: Provider Start ==
+P -> P: new()
+P -> P: register_provider()
+activate P
+P -> PW: Create DataWriter(ProviderRegistration)
+P -> PW: Write(ProviderMessage)
+PW -> T_PR: Publish "I provide X"
+note right of PW: Data Stored in History Cache\n(Waiting for late joiners)
+deactivate P
+
+== Phase 2: Consumer Start (Non-Blocking) ==
+C -> C: new()
+C -> C: register_consumer()
+activate C
+C -> CW: Write(ConsumerDiscovery)
+CW -> T_CD: Publish "I need X"
+C -> C: create_handle()
+note right of C: Handle created immediately.\nNo waiting for providers.
+C --> CH: Return Handle
+deactivate C
+
+== Phase 3: Consumer Makes Request (Waiting Happens Here) ==
+C -> CH: request(data, timeout)
+activate CH
+CH -> CH: wait_for_writer_match(timeout)
+note right of CH: Provider already matched\n(fast path).
+
+CH -> CW: Write(Request)
+CW -> T_RR: Publish Request
+T_RR -> PR: **DATA AVAILABLE**
+PR -> P: Handle Request
+P -> PW: Write(Response)
+PW -> T_RR: Publish Response
+T_RR -> CR: **DATA AVAILABLE**
+CR -> CH: Response received
+CH --> C: Return Response
+deactivate CH
+
+@enduml

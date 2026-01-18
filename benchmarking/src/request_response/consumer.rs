@@ -3,6 +3,7 @@ use dust_dds::{
     infrastructure::time::Duration,
 };
 use mycelium_computing::consumes;
+use mycelium_computing::core::module::Module;
 
 use crate::common::types::{MathRequest, MathResult};
 
@@ -18,35 +19,9 @@ async fn init_consumer() {
     let factory =
         DomainParticipantFactoryAsync::<dust_dds::std_runtime::StdRuntime>::get_instance();
 
-    let participant = factory
-        .create_participant(
-            0,
-            dust_dds::infrastructure::qos::QosKind::Default,
-            dust_dds::listener::NO_LISTENER,
-            dust_dds::infrastructure::status::NO_STATUS,
-        )
-        .await
-        .unwrap();
+    let mut app = Module::new(0, "MathConsumer", factory).await;
 
-    let subscriber = participant
-        .create_subscriber(
-            dust_dds::infrastructure::qos::QosKind::Default,
-            dust_dds::listener::NO_LISTENER,
-            dust_dds::infrastructure::status::NO_STATUS,
-        )
-        .await
-        .unwrap();
-
-    let publisher = participant
-        .create_publisher(
-            dust_dds::infrastructure::qos::QosKind::Default,
-            dust_dds::listener::NO_LISTENER,
-            dust_dds::infrastructure::status::NO_STATUS,
-        )
-        .await
-        .unwrap();
-
-    let consumer = Math::init(&participant, &subscriber, &publisher).await;
+    let consumer = app.register_consumer::<Math>().await;
 
     for _ in 0..100 {
         consumer

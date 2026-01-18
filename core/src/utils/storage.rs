@@ -1,3 +1,6 @@
+extern crate alloc;
+
+use alloc::{boxed::Box, vec::Vec};
 use core::any::Any;
 
 pub struct ExecutionObjects {

@@ -1,13 +1,19 @@
 pub mod consumer;
 pub mod provider;
 
+extern crate alloc;
+
 use crate::core::listener::{
     NoOpDataReaderListener, NoOpDataWriterListener, NoOpParticipantListener, NoOpPublisherListener,
     NoOpSubscriberListener, NoOpTopicListener,
 };
 use crate::core::messages::{ConsumerDiscovery, ProviderMessage};
+use crate::core::module::consumer::ConsumerTrait;
 use crate::core::module::provider::ProviderTrait;
+use crate::core::qos::{reliable_reader_qos, reliable_writer_qos};
 use crate::utils::storage::ExecutionObjects;
+use alloc::string::{String, ToString};
+use core::time::Duration as StdDuration;
 use dust_dds::dds_async::data_reader::DataReaderAsync;
 use dust_dds::dds_async::data_writer::DataWriterAsync;
 use dust_dds::dds_async::domain_participant::DomainParticipantAsync;
@@ -16,6 +22,7 @@ use dust_dds::dds_async::publisher::PublisherAsync;
 use dust_dds::dds_async::subscriber::SubscriberAsync;
 use dust_dds::infrastructure::qos::QosKind;
 use dust_dds::infrastructure::status::{NO_STATUS, StatusKind};
+use dust_dds::infrastructure::time::Duration;
 use dust_dds::runtime::DdsRuntime;
 
 pub struct Module {
@@ -23,16 +30,72 @@ pub struct Module {
     pub participant: DomainParticipantAsync,
     pub publisher: PublisherAsync,
     subscriber: SubscriberAsync,
-    pub consumer_request_reader: DataReaderAsync<ConsumerDiscovery>,
     provider_registration_writer: DataWriterAsync<ProviderMessage>,
-    pub providers: Vec<ProviderMessage>,
+    provider_registration_reader: DataReaderAsync<ProviderMessage>,
+    consumer_discovery_writer: DataWriterAsync<ConsumerDiscovery>,
+    consumer_discovery_reader: DataReaderAsync<ConsumerDiscovery>,
     objects_storage: ExecutionObjects,
 }
 
 impl Module {
     pub async fn run_forever(&self) {
-        println!("{} is waiting forever", self.name);
         core::future::pending::<()>().await;
+    }
+
+    pub fn provider_registration_reader(&self) -> &DataReaderAsync<ProviderMessage> {
+        &self.provider_registration_reader
+    }
+
+    pub fn consumer_discovery_reader(&self) -> &DataReaderAsync<ConsumerDiscovery> {
+        &self.consumer_discovery_reader
+    }
+
+    /// Waits until at least one provider is discovered on the ProviderRegistration topic.
+    /// This ensures the SEDP handshake has completed and data can flow.
+    pub async fn wait_for_providers(&self) {
+        loop {
+            let status = self
+                .provider_registration_reader
+                .get_subscription_matched_status()
+                .await;
+
+            if let Ok(status) = status {
+                if status.current_count > 0 {
+                    break;
+                }
+            }
+
+            futures_timer::Delay::new(StdDuration::from_millis(10)).await;
+        }
+
+        self.provider_registration_reader
+            .wait_for_historical_data(Duration::new(5, 0))
+            .await
+            .ok();
+    }
+
+    /// Waits until at least one consumer is discovered on the ConsumerDiscovery topic.
+    /// This ensures the SEDP handshake has completed and data can flow.
+    pub async fn wait_for_consumers(&self) {
+        loop {
+            let status = self
+                .consumer_discovery_reader
+                .get_subscription_matched_status()
+                .await;
+
+            if let Ok(status) = status {
+                if status.current_count > 0 {
+                    break;
+                }
+            }
+
+            futures_timer::Delay::new(StdDuration::from_millis(10)).await;
+        }
+
+        self.consumer_discovery_reader
+            .wait_for_historical_data(Duration::new(5, 0))
+            .await
+            .ok();
     }
 
     /// Registers a provider and returns its ContinuousHandle for publishing continuous data.
@@ -60,8 +123,27 @@ impl Module {
             .await;
         }
 
-        // Create and return the continuous handle for this provider
         P::create_continuous_handle(&self.participant, &self.publisher).await
+    }
+
+    pub async fn register_consumer<C: ConsumerTrait>(&mut self) -> C::Handle {
+        let consumer_id = C::get_consumer_id();
+        let functionalities = C::get_requested_functionalities();
+
+        for functionality in functionalities {
+            self.consumer_discovery_writer
+                .write(
+                    ConsumerDiscovery {
+                        consumer_id: consumer_id.clone(),
+                        requested_functionality: functionality,
+                    },
+                    None,
+                )
+                .await
+                .unwrap();
+        }
+
+        C::create_handle(&self.participant, &self.publisher, &self.subscriber).await
     }
 
     pub async fn new<R: DdsRuntime>(
@@ -90,7 +172,7 @@ impl Module {
             .await
             .unwrap();
 
-        let consumer_request_topic = participant
+        let consumer_discovery_topic = participant
             .create_topic::<ConsumerDiscovery>(
                 "ConsumerDiscovery",
                 "ConsumerDiscovery",
@@ -111,24 +193,40 @@ impl Module {
             .await
             .unwrap();
 
-        // TODO: Define the specific QoS configuration for the writer
         let provider_registration_writer = publisher
             .create_datawriter::<ProviderMessage>(
                 &provider_registration_topic,
-                QosKind::Default,
+                QosKind::Specific(reliable_writer_qos()),
                 None::<NoOpDataWriterListener>,
                 NO_STATUS,
             )
             .await
             .unwrap();
 
-        let providers = Vec::new();
+        let provider_registration_reader = subscriber
+            .create_datareader::<ProviderMessage>(
+                &provider_registration_topic,
+                QosKind::Specific(reliable_reader_qos()),
+                None::<NoOpDataReaderListener>,
+                &[StatusKind::DataAvailable],
+            )
+            .await
+            .unwrap();
 
-        // TODO: Define the specific QoS configuration for the reader
-        let consumer_request_reader = subscriber
+        let consumer_discovery_writer = publisher
+            .create_datawriter::<ConsumerDiscovery>(
+                &consumer_discovery_topic,
+                QosKind::Specific(reliable_writer_qos()),
+                None::<NoOpDataWriterListener>,
+                NO_STATUS,
+            )
+            .await
+            .unwrap();
+
+        let consumer_discovery_reader = subscriber
             .create_datareader::<ConsumerDiscovery>(
-                &consumer_request_topic,
-                QosKind::Default,
+                &consumer_discovery_topic,
+                QosKind::Specific(reliable_reader_qos()),
                 None::<NoOpDataReaderListener>,
                 &[StatusKind::DataAvailable],
             )
@@ -142,9 +240,10 @@ impl Module {
             participant,
             publisher,
             subscriber,
-            consumer_request_reader,
             provider_registration_writer,
-            providers,
+            provider_registration_reader,
+            consumer_discovery_writer,
+            consumer_discovery_reader,
             objects_storage,
         }
     }

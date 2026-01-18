@@ -1,3 +1,6 @@
+extern crate alloc;
+
+use alloc::{string::String, vec::Vec};
 use dust_dds::infrastructure::type_support::{DdsType, TypeSupport};
 
 #[derive(DdsType, Debug, Clone)]

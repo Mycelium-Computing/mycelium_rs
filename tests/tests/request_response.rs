@@ -36,6 +36,7 @@ mod tests {
     use std::time::Duration;
 
     use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
+    use futures::FutureExt;
     use mycelium_computing::core::module::Module;
     use smol::Timer;
 
@@ -47,50 +48,23 @@ mod tests {
     fn test_function() {
         let handle = std::thread::spawn(|| {
             smol::block_on(async {
-                let participant_factory = DomainParticipantFactoryAsync::get_instance();
-                let mut app = Module::new(150, "test_application", participant_factory).await;
+                let factory = DomainParticipantFactoryAsync::get_instance();
+                let mut app = Module::new(150, "test_provider", factory).await;
                 app.register_provider::<CalculatorProvider>().await;
 
                 Timer::after(Duration::new(2, 0)).await;
             });
         });
 
-        smol::block_on(async {
+        let expected_result = 3.0;
+
+        async fn test_consumer() -> f32 {
             let factory = DomainParticipantFactoryAsync::get_instance();
+            let mut app = Module::new(150, "test_consumer", factory).await;
 
-            let participant = factory
-                .create_participant(
-                    150,
-                    dust_dds::infrastructure::qos::QosKind::Default,
-                    dust_dds::listener::NO_LISTENER,
-                    dust_dds::infrastructure::status::NO_STATUS,
-                )
-                .await
-                .unwrap();
+            let consumer = app.register_consumer::<CalculatorConsumer>().await;
 
-            let subscriber = participant
-                .create_subscriber(
-                    dust_dds::infrastructure::qos::QosKind::Default,
-                    dust_dds::listener::NO_LISTENER,
-                    dust_dds::infrastructure::status::NO_STATUS,
-                )
-                .await
-                .unwrap();
-
-            let publisher = participant
-                .create_publisher(
-                    dust_dds::infrastructure::qos::QosKind::Default,
-                    dust_dds::listener::NO_LISTENER,
-                    dust_dds::infrastructure::status::NO_STATUS,
-                )
-                .await
-                .unwrap();
-
-            let consumer = CalculatorConsumer::init(&participant, &subscriber, &publisher).await;
-            Timer::after(Duration::from_millis(500)).await; // TODO: Correctly handle the delay via application logic
             let request = ArithmeticRequest { a: 1.0, b: 2.0 };
-
-            let expected_result = 3.0;
 
             let result = consumer
                 .add_two_ints(
@@ -100,11 +74,17 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(
-                result.value, expected_result,
-                "The provider responded with an incorrect result"
-            );
+            return result.value;
+        }
+
+        let value = smol::block_on(async {
+            mycelium_computing::futures::select! {
+                res = test_consumer().fuse() => res,
+                _ = Timer::after(Duration::new(3, 0)).fuse() => -1.0,
+            }
         });
+
+        assert_eq!(value, expected_result);
 
         handle.join().unwrap();
     }

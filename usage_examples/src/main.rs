@@ -56,38 +56,9 @@ async fn provider() {
 
 async fn consumer() {
     let factory = DomainParticipantFactoryAsync::get_instance();
+    let mut app = Module::new(0, "FaceRecognitionProxyApp", factory).await;
 
-    let participant = factory
-        .create_participant(
-            0,
-            dust_dds::infrastructure::qos::QosKind::Default,
-            dust_dds::listener::NO_LISTENER,
-            dust_dds::infrastructure::status::NO_STATUS,
-        )
-        .await
-        .unwrap();
-
-    let subscriber = participant
-        .create_subscriber(
-            dust_dds::infrastructure::qos::QosKind::Default,
-            dust_dds::listener::NO_LISTENER,
-            dust_dds::infrastructure::status::NO_STATUS,
-        )
-        .await
-        .unwrap();
-
-    let publisher = participant
-        .create_publisher(
-            dust_dds::infrastructure::qos::QosKind::Default,
-            dust_dds::listener::NO_LISTENER,
-            dust_dds::infrastructure::status::NO_STATUS,
-        )
-        .await
-        .unwrap();
-
-    let consumer = FaceRecognitionProxy::init(&participant, &subscriber, &publisher).await;
-
-    // Consumer waiting forever
+    let consumer = app.register_consumer::<FaceRecognitionProxy>().await;
 
     loop {
         let res = consumer

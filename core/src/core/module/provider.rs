@@ -1,5 +1,8 @@
+extern crate alloc;
+
 use crate::core::messages::ProviderMessage;
 use crate::utils::storage::ExecutionObjects;
+use alloc::string::String;
 use dust_dds::dds_async::domain_participant::DomainParticipantAsync;
 use dust_dds::dds_async::publisher::PublisherAsync;
 use dust_dds::dds_async::subscriber::SubscriberAsync;

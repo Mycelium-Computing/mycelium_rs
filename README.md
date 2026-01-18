@@ -42,7 +42,7 @@ Add the following to your `Cargo.toml`:
 ```toml
 [dependencies]
 mycelium_computing = { path = "path/to/core" }
-dust_dds =  { git = "https://github.com/s2e-systems/dust-dds.git", branch = "main", default-features = false, features = ["dcps", "rtps", "transport"] }
+dust_dds =  { git = "https://github.com/s2e-systems/dust-dds.git", branch = "main", default-features = false, features = ["dcps"] }
 ```
 
 ## Quick Start

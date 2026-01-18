@@ -5,6 +5,6 @@ edition = "2024"
 
 [dependencies]
 mycelium_computing = { path = "../core" }
-dust_dds =  { git = "https://github.com/s2e-systems/dust-dds.git", branch = "main" }
+dust_dds = { git = "https://github.com/s2e-systems/dust-dds.git", rev = "64f6052e996a6e9f5802d7fc5566d1d99517ace3" }
 rand = "0.10.0-rc.5"
 smol = "2.0.2"

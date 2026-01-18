@@ -1,7 +1,6 @@
 use std::sync::{LazyLock, Mutex};
 
 use dust_dds::infrastructure::type_support::DdsType;
-use dust_dds::std_runtime::StdRuntime;
 use mycelium_computing::{consumes, provides};
 
 #[derive(DdsType)]
@@ -9,12 +8,12 @@ struct Number {
     value: i32,
 }
 
-#[provides(StdRuntime, [
+#[provides([
     Continuous("integer", Number)
 ])]
 struct NumberGenerator;
 
-#[consumes(StdRuntime, [
+#[consumes([
     Continuous("integer", Number)
 ])]
 struct NumberReceiver;
@@ -57,9 +56,9 @@ mod tests {
 
         Timer::after(Duration::from_millis(500)).await;
 
-        continuous_handle.integer(&Number { value: 1 }).await;
-        continuous_handle.integer(&Number { value: 2 }).await;
-        continuous_handle.integer(&Number { value: 3 }).await;
+        continuous_handle.integer(Number { value: 1 }).await;
+        continuous_handle.integer(Number { value: 2 }).await;
+        continuous_handle.integer(Number { value: 3 }).await;
 
         Timer::after(Duration::from_secs(2)).await;
     }

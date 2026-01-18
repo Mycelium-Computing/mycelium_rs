@@ -11,19 +11,17 @@ mod tests {
         },
         infrastructure::{
             qos::QosKind,
-            sample_info::{ANY_INSTANCE_STATE, ANY_SAMPLE_STATE, ANY_VIEW_STATE},
             status::{NO_STATUS, StatusKind},
             type_support::DdsType,
         },
         listener::NO_LISTENER,
-        std_runtime::StdRuntime,
         subscription::data_reader_listener::DataReaderListener,
     };
     use smol::Timer;
 
     #[derive(DdsType, Debug)]
-    struct ARandomMessage<'a> {
-        field1: &'a str,
+    struct ARandomMessage {
+        field1: String,
         field2: i32,
     }
 
@@ -32,13 +30,13 @@ mod tests {
 
     struct MatchedSubscriber;
 
-    impl<T> DataReaderListener<StdRuntime, T> for MatchedSubscriber
+    impl<T> DataReaderListener<T> for MatchedSubscriber
     where
         T: Send + 'static,
     {
         async fn on_subscription_matched(
             &mut self,
-            _the_reader: DataReaderAsync<StdRuntime, T>,
+            _the_reader: DataReaderAsync<T>,
             _status: dust_dds::infrastructure::status::SubscriptionMatchedStatus,
         ) {
             println!("Matched Status: {:?}", _status);
@@ -47,7 +45,7 @@ mod tests {
 
         async fn on_liveliness_changed(
             &mut self,
-            _the_reader: DataReaderAsync<StdRuntime, T>,
+            _the_reader: DataReaderAsync<T>,
             _status: dust_dds::infrastructure::status::LivelinessChangedStatus,
         ) {
             println!("Changed Status: {:?}", _status);

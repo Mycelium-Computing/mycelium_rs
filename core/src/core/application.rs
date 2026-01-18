@@ -2,6 +2,10 @@ pub mod consumer;
 pub mod provider;
 
 use crate::core::application::provider::ProviderTrait;
+use crate::core::listener::{
+    NoOpDataReaderListener, NoOpDataWriterListener, NoOpParticipantListener, NoOpPublisherListener,
+    NoOpSubscriberListener, NoOpTopicListener,
+};
 use crate::core::messages::{ConsumerDiscovery, ProviderMessage};
 use crate::utils::storage::ExecutionObjects;
 use dust_dds::dds_async::data_reader::DataReaderAsync;
@@ -12,22 +16,20 @@ use dust_dds::dds_async::publisher::PublisherAsync;
 use dust_dds::dds_async::subscriber::SubscriberAsync;
 use dust_dds::infrastructure::qos::QosKind;
 use dust_dds::infrastructure::status::{NO_STATUS, StatusKind};
-use dust_dds::listener::NO_LISTENER;
 use dust_dds::runtime::DdsRuntime;
-use dust_dds::transport::interface::TransportParticipantFactory;
 
-pub struct Application<T: DdsRuntime> {
+pub struct Application {
     name: String,
-    pub participant: DomainParticipantAsync<T>,
-    pub publisher: PublisherAsync<T>,
-    subscriber: SubscriberAsync<T>,
-    pub consumer_request_reader: DataReaderAsync<T, ConsumerDiscovery>,
-    provider_registration_writer: DataWriterAsync<T, ProviderMessage>,
+    pub participant: DomainParticipantAsync,
+    pub publisher: PublisherAsync,
+    subscriber: SubscriberAsync,
+    pub consumer_request_reader: DataReaderAsync<ConsumerDiscovery>,
+    provider_registration_writer: DataWriterAsync<ProviderMessage>,
     pub providers: Vec<ProviderMessage>,
     objects_storage: ExecutionObjects,
 }
 
-impl<T: DdsRuntime> Application<T> {
+impl Application {
     pub async fn run_forever(&self) {
         println!("{} is waiting forever", self.name);
         core::future::pending::<()>().await;
@@ -39,11 +41,11 @@ impl<T: DdsRuntime> Application<T> {
     /// be stored for the lifetime of the provider to publish data without reinstantiation.
     ///
     /// For providers without continuous functionalities, this returns `NoContinuousHandle`.
-    pub async fn register_provider<P: ProviderTrait<T>>(&mut self) -> P::ContinuousHandle {
+    pub async fn register_provider<P: ProviderTrait>(&mut self) -> P::ContinuousHandle {
         let functionalities = P::get_functionalities();
 
         self.provider_registration_writer
-            .write(&functionalities, None)
+            .write(functionalities.clone(), None)
             .await
             .unwrap();
 
@@ -62,16 +64,18 @@ impl<T: DdsRuntime> Application<T> {
         P::create_continuous_handle(&self.participant, &self.publisher).await
     }
 
-    pub async fn new(
+    pub async fn new<R: DdsRuntime>(
         domain_id: u32,
         name: &str,
-        participant_factory: &'static DomainParticipantFactoryAsync<
-            T,
-            impl TransportParticipantFactory,
-        >,
+        participant_factory: &'static DomainParticipantFactoryAsync<R>,
     ) -> Self {
         let participant = participant_factory
-            .create_participant(domain_id as i32, QosKind::Default, NO_LISTENER, NO_STATUS)
+            .create_participant(
+                domain_id as i32,
+                QosKind::Default,
+                None::<NoOpParticipantListener>,
+                NO_STATUS,
+            )
             .await
             .unwrap();
 
@@ -80,7 +84,7 @@ impl<T: DdsRuntime> Application<T> {
                 "ProviderRegistration",
                 "ProviderRegistration",
                 QosKind::Default,
-                NO_LISTENER,
+                None::<NoOpTopicListener>,
                 NO_STATUS,
             )
             .await
@@ -91,19 +95,19 @@ impl<T: DdsRuntime> Application<T> {
                 "ConsumerDiscovery",
                 "ConsumerDiscovery",
                 QosKind::Default,
-                NO_LISTENER,
+                None::<NoOpTopicListener>,
                 NO_STATUS,
             )
             .await
             .unwrap();
 
         let publisher = participant
-            .create_publisher(QosKind::Default, NO_LISTENER, NO_STATUS)
+            .create_publisher(QosKind::Default, None::<NoOpPublisherListener>, NO_STATUS)
             .await
             .unwrap();
 
         let subscriber = participant
-            .create_subscriber(QosKind::Default, NO_LISTENER, NO_STATUS)
+            .create_subscriber(QosKind::Default, None::<NoOpSubscriberListener>, NO_STATUS)
             .await
             .unwrap();
 
@@ -112,7 +116,7 @@ impl<T: DdsRuntime> Application<T> {
             .create_datawriter::<ProviderMessage>(
                 &provider_registration_topic,
                 QosKind::Default,
-                NO_LISTENER,
+                None::<NoOpDataWriterListener>,
                 NO_STATUS,
             )
             .await
@@ -125,7 +129,7 @@ impl<T: DdsRuntime> Application<T> {
             .create_datareader::<ConsumerDiscovery>(
                 &consumer_request_topic,
                 QosKind::Default,
-                NO_LISTENER,
+                None::<NoOpDataReaderListener>,
                 &[StatusKind::DataAvailable],
             )
             .await

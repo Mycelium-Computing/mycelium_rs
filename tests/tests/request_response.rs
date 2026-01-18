@@ -1,4 +1,4 @@
-use dust_dds::{infrastructure::type_support::DdsType, std_runtime::StdRuntime};
+use dust_dds::infrastructure::type_support::DdsType;
 use mycelium_computing::{consumes, provides};
 
 #[derive(DdsType)]
@@ -12,7 +12,7 @@ struct Number {
     value: f32,
 }
 
-#[provides(StdRuntime, [
+#[provides([
     RequestResponse("add_two_ints", ArithmeticRequest, Number)
 ])]
 struct CalculatorProvider;
@@ -26,7 +26,7 @@ impl CalculatorProviderProviderTrait for CalculatorProvider {
     }
 }
 
-#[consumes(StdRuntime, [
+#[consumes([
     RequestResponse("add_two_ints", ArithmeticRequest, Number),
 ])]
 struct CalculatorConsumer;
@@ -87,6 +87,7 @@ mod tests {
                 .unwrap();
 
             let consumer = CalculatorConsumer::init(&participant, &subscriber, &publisher).await;
+            Timer::after(Duration::from_millis(500)).await; // TODO: Correctly handle the delay via application logic
             let request = ArithmeticRequest { a: 1.0, b: 2.0 };
 
             let expected_result = 3.0;

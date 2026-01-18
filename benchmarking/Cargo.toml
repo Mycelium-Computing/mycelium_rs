@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 mycelium_computing = { path = "../core" }
-dust_dds = "0.13.0"
+dust_dds = { git = "https://github.com/s2e-systems/dust-dds.git", branch = "main" }
 rand = "0.10.0-rc.5"
 smol = "2.0.2"
 serde = { version = "1.0", features = ["derive"] }
@@ -19,11 +19,3 @@ path = "src/request_response/consumer.rs"
 [[bin]]
 name = "request_response_provider"
 path = "src/request_response/provider.rs"
-
-[[bin]]
-name = "continuous_consumer"
-path = "src/continuous/consumer.rs"
-
-[[bin]]
-name = "continuous_provider"
-path = "src/continuous/provider.rs"

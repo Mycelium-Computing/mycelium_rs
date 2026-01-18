@@ -71,25 +71,11 @@ impl Parse for Functionality {
 }
 
 pub struct Functionalities {
-    pub runtime: Ident,
     pub functionalities: Vec<Functionality>,
 }
 
 impl Parse for Functionalities {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        // Parse the runtime identifier first
-        let runtime: Ident = if input.peek(Token![,]) || input.peek(syn::token::Bracket) {
-            return Err(syn::Error::new(
-                input.span(),
-                "Proportionate a runtime identifier before the functionalities list",
-            ));
-        } else {
-            input.parse()?
-        };
-
-        // Expect a comma after the runtime identifier
-        input.parse::<Token![,]>()?;
-
         // Parse the bracketed list of functionalities
         let content;
         syn::bracketed!(content in input);
@@ -99,9 +85,6 @@ impl Parse for Functionalities {
 
         let functionalities = functionalities_parsed.into_iter().collect();
 
-        Ok(Functionalities {
-            runtime,
-            functionalities,
-        })
+        Ok(Functionalities { functionalities })
     }
 }

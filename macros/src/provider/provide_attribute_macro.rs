@@ -57,14 +57,13 @@ fn get_continuous_handle_struct_tokens(
         return proc_macro2::TokenStream::new();
     }
 
-    let runtime = &functionalities.runtime;
     let handle_name = format_ident!("{}ContinuousHandle", struct_name);
 
     let fields = continuous_funcs.iter().map(|f| {
         let field_name = format_ident!("{}_writer", f.name.to_string().to_lowercase());
         let output_type = &f.output_type;
         quote! {
-            #field_name: dust_dds::dds_async::data_writer::DataWriterAsync<#runtime, #output_type>
+            #field_name: dust_dds::dds_async::data_writer::DataWriterAsync<#output_type>
         }
     });
 
@@ -101,7 +100,7 @@ fn get_continuous_handle_impl_tokens(
 
         quote! {
             /// Publishes data for this continuous functionality.
-            pub async fn #method_name(&self, data: &#output_type) {
+            pub async fn #method_name(&self, data: #output_type) {
                 self.#field_name.write(data, None).await.unwrap();
             }
         }
@@ -126,16 +125,14 @@ fn get_create_continuous_handle_impl_tokens(
         .filter(|f| f.kind == FunctionalityKind::Continuous)
         .collect();
 
-    let runtime = &functionalities.runtime;
-
     if continuous_funcs.is_empty() {
         // No continuous functionalities - return NoContinuousHandle
         return quote! {
             type ContinuousHandle = mycelium_computing::core::application::provider::NoContinuousHandle;
 
             async fn create_continuous_handle(
-                _participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync<#runtime>,
-                _publisher: &dust_dds::dds_async::publisher::PublisherAsync<#runtime>,
+                _participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
+                _publisher: &dust_dds::dds_async::publisher::PublisherAsync,
             ) -> Self::ContinuousHandle {
                 mycelium_computing::core::application::provider::NoContinuousHandle
             }
@@ -156,7 +153,7 @@ fn get_create_continuous_handle_impl_tokens(
                 #topic_name,
                 #type_name,
                 dust_dds::infrastructure::qos::QosKind::Default,
-                dust_dds::listener::NO_LISTENER,
+                None::<mycelium_computing::core::listener::NoOpTopicListener>,
                 dust_dds::infrastructure::status::NO_STATUS,
             )
             .await
@@ -173,7 +170,7 @@ fn get_create_continuous_handle_impl_tokens(
             let #writer_var = publisher.create_datawriter::<#output_type>(
                 &#topic_var,
                 dust_dds::infrastructure::qos::QosKind::Default,
-                dust_dds::listener::NO_LISTENER,
+                None::<mycelium_computing::core::listener::NoOpDataWriterListener>,
                 dust_dds::infrastructure::status::NO_STATUS,
             )
             .await
@@ -190,8 +187,8 @@ fn get_create_continuous_handle_impl_tokens(
         type ContinuousHandle = #handle_name;
 
         async fn create_continuous_handle(
-            participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync<#runtime>,
-            publisher: &dust_dds::dds_async::publisher::PublisherAsync<#runtime>,
+            participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
+            publisher: &dust_dds::dds_async::publisher::PublisherAsync,
         ) -> Self::ContinuousHandle {
             #(#topic_creations)*
             #(#writer_creations)*
@@ -307,7 +304,7 @@ fn get_functionality_channel_tokens(
             #topic_req_name,
             #request_topic_type_name,
             dust_dds::infrastructure::qos::QosKind::Default,
-            dust_dds::listener::NO_LISTENER,
+            None::<mycelium_computing::core::listener::NoOpTopicListener>,
             dust_dds::infrastructure::status::NO_STATUS,
         )
             .await
@@ -318,7 +315,7 @@ fn get_functionality_channel_tokens(
             #topic_res_name,
             #response_topic_type_name,
             dust_dds::infrastructure::qos::QosKind::Default,
-            dust_dds::listener::NO_LISTENER,
+            None::<mycelium_computing::core::listener::NoOpTopicListener>,
             dust_dds::infrastructure::status::NO_STATUS,
         )
             .await
@@ -340,7 +337,7 @@ fn get_functionality_channel_tokens(
         let writer = publisher.create_datawriter::<mycelium_computing::core::messages::ProviderExchange<#output_type>>(
             &response_topic,
             dust_dds::infrastructure::qos::QosKind::Default,
-            dust_dds::listener::NO_LISTENER,
+            None::<mycelium_computing::core::listener::NoOpDataWriterListener>,
             dust_dds::infrastructure::status::NO_STATUS
         )
             .await
@@ -426,10 +423,8 @@ fn get_provider_impl_tokens(
     let continuous_handle_impl =
         get_create_continuous_handle_impl_tokens(provider_name, functionalities);
 
-    let runtime = &functionalities.runtime;
-
     quote::quote! {
-        impl mycelium_computing::core::application::provider::ProviderTrait<#runtime> for #provider_name {
+        impl mycelium_computing::core::application::provider::ProviderTrait for #provider_name {
             #continuous_handle_impl
 
             fn get_functionalities() -> mycelium_computing::core::messages::ProviderMessage {
@@ -438,9 +433,9 @@ fn get_provider_impl_tokens(
 
             async fn create_execution_objects(
                 functionality_name: String,
-                participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync<#runtime>,
-                publisher: &dust_dds::dds_async::publisher::PublisherAsync<#runtime>,
-                subscriber: &dust_dds::dds_async::subscriber::SubscriberAsync<#runtime>,
+                participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
+                publisher: &dust_dds::dds_async::publisher::PublisherAsync,
+                subscriber: &dust_dds::dds_async::subscriber::SubscriberAsync,
                 storage: &mut mycelium_computing::utils::storage::ExecutionObjects,
             ) {
                 #channel_tokens

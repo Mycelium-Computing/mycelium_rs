@@ -10,7 +10,6 @@ use syn::{Ident, ItemStruct, Type};
 fn get_functionalities_readers_attributes(
     functionalities: &Functionalities,
 ) -> Vec<proc_macro2::TokenStream> {
-    let runtime = &functionalities.runtime;
     functionalities
         .functionalities
         .iter()
@@ -23,7 +22,7 @@ fn get_functionalities_readers_attributes(
                 FunctionalityKind::RequestResponse | FunctionalityKind::Response => {
                     let reader_ident = format_ident!("{}_reader", name.to_string().to_lowercase());
                     Some(quote! {
-                        #reader_ident: dust_dds::dds_async::data_reader::DataReaderAsync<#runtime, mycelium_computing::core::messages::ProviderExchange<#output_type>>
+                        #reader_ident: dust_dds::dds_async::data_reader::DataReaderAsync< mycelium_computing::core::messages::ProviderExchange<#output_type>>
                     })
                 }
             }
@@ -34,7 +33,6 @@ fn get_functionalities_readers_attributes(
 fn get_functionalities_writers_attributes(
     functionalities: &Functionalities,
 ) -> Vec<proc_macro2::TokenStream> {
-    let runtime = &functionalities.runtime;
     functionalities
         .functionalities
         .iter()
@@ -47,13 +45,13 @@ fn get_functionalities_writers_attributes(
                     let writer_ident = format_ident!("{}_writer", name.to_string().to_lowercase());
                     let input_type = functionality.input_type.as_ref().unwrap();
                     Some(quote! {
-                        #writer_ident: dust_dds::dds_async::data_writer::DataWriterAsync<#runtime, mycelium_computing::core::messages::ProviderExchange<#input_type>>
+                        #writer_ident: dust_dds::dds_async::data_writer::DataWriterAsync< mycelium_computing::core::messages::ProviderExchange<#input_type>>
                     })
                 }
                 FunctionalityKind::Response => {
                     let writer_ident = format_ident!("{}_writer", name.to_string().to_lowercase());
                     Some(quote! {
-                        #writer_ident: dust_dds::dds_async::data_writer::DataWriterAsync<#runtime, mycelium_computing::core::messages::ProviderExchange<mycelium_computing::core::messages::EmptyMessage>>
+                        #writer_ident: dust_dds::dds_async::data_writer::DataWriterAsync< mycelium_computing::core::messages::ProviderExchange<mycelium_computing::core::messages::EmptyMessage>>
                     })
                 }
             }
@@ -165,7 +163,6 @@ fn get_functionalities_topics_instantiations(
 
 fn generate_continuous_listener(
     struct_name: &Ident,
-    runtime: &Ident,
     output_type: &Type,
     func_name: &Ident,
     index: usize,
@@ -175,10 +172,10 @@ fn generate_continuous_listener(
 
     quote! {
         struct #listener_name;
-        impl dust_dds::subscription::data_reader_listener::DataReaderListener<#runtime, #output_type> for #listener_name {
+        impl dust_dds::subscription::data_reader_listener::DataReaderListener<#output_type> for #listener_name {
             async fn on_data_available(
                 &mut self,
-                reader: dust_dds::dds_async::data_reader::DataReaderAsync<#runtime, #output_type>,
+                reader: dust_dds::dds_async::data_reader::DataReaderAsync<#output_type>,
             ) {
                 let samples = reader
                     .take(
@@ -190,9 +187,9 @@ fn generate_continuous_listener(
                     .await;
 
                 if let Ok(data) = samples {
-                    for sample in &data {
-                        if let Ok(data) = sample.data() {
-                            #struct_name::#func_name(data).await;
+                    for sample in data {
+                        if let Some(d) = sample.data {
+                            #struct_name::#func_name(d).await;
                         }
                     }
                 }
@@ -205,8 +202,6 @@ fn get_functionalities_listeners(
     struct_name: &Ident,
     functionalities: &Functionalities,
 ) -> Vec<proc_macro2::TokenStream> {
-    let runtime = &functionalities.runtime;
-
     functionalities
         .functionalities
         .iter()
@@ -215,7 +210,6 @@ fn get_functionalities_listeners(
         .map(|(i, functionality)| {
             generate_continuous_listener(
                 struct_name,
-                runtime,
                 &functionality.output_type,
                 &functionality.name,
                 i,
@@ -331,11 +325,10 @@ fn get_functionalities_trait_definitions(
 fn generate_response_wait_logic(
     writer_ident: &Ident,
     reader_ident: &Ident,
-    runtime: &Ident,
     output_type: &Type,
 ) -> proc_macro2::TokenStream {
     quote! {
-        let (sender, receiver) = #runtime::oneshot::<#output_type>();
+        let (sender, receiver) = dust_dds::dcps::channels::oneshot::oneshot::<#output_type>();
 
         let listener = mycelium_computing::core::listener::ProviderResponseListener {
             expected_id: request.id,
@@ -348,7 +341,7 @@ fn generate_response_wait_logic(
             .unwrap();
 
         self.#writer_ident
-            .write(&request, None)
+            .write(request, None)
             .await
             .unwrap();
 
@@ -376,9 +369,8 @@ fn generate_request_response_method(
     output_type: &Type,
     writer_ident: &Ident,
     reader_ident: &Ident,
-    runtime: &Ident,
 ) -> proc_macro2::TokenStream {
-    let wait_logic = generate_response_wait_logic(writer_ident, reader_ident, runtime, output_type);
+    let wait_logic = generate_response_wait_logic(writer_ident, reader_ident, output_type);
 
     quote! {
         async fn #name(
@@ -404,9 +396,8 @@ fn generate_response_method(
     output_type: &Type,
     writer_ident: &Ident,
     reader_ident: &Ident,
-    runtime: &Ident,
 ) -> proc_macro2::TokenStream {
-    let wait_logic = generate_response_wait_logic(writer_ident, reader_ident, runtime, output_type);
+    let wait_logic = generate_response_wait_logic(writer_ident, reader_ident, output_type);
 
     quote! {
         async fn #name(
@@ -418,7 +409,7 @@ fn generate_response_method(
 
             let request = mycelium_computing::core::messages::ProviderExchange {
                 id: mycelium_computing::utils::next_request_id(),
-                payload: mycelium_computing::core::messages::EmptyMessage,
+                payload: mycelium_computing::core::messages::EmptyMessage::default(),
             };
 
             #wait_logic
@@ -444,7 +435,6 @@ fn get_functionalities_trait_implementations(
     }
 
     let trait_name = format_ident!("{}ResponseTrait", struct_name);
-    let runtime = &functionalities.runtime;
 
     let methods = response_funcs.iter().map(|f| {
         let name = &f.name;
@@ -461,11 +451,10 @@ fn get_functionalities_trait_implementations(
                     output_type,
                     &writer_ident,
                     &reader_ident,
-                    runtime,
                 )
             }
             FunctionalityKind::Response => {
-                generate_response_method(name, output_type, &writer_ident, &reader_ident, runtime)
+                generate_response_method(name, output_type, &writer_ident, &reader_ident)
             }
             _ => unreachable!(),
         }
@@ -619,8 +608,6 @@ fn get_consumer_struct_impl(
     functionalities: &Functionalities,
     consumer_struct_name: &Ident,
 ) -> proc_macro2::TokenStream {
-    let runtime = &functionalities.runtime;
-
     let data_topics_instantiations = get_functionalities_topics_instantiations(functionalities);
     let init_body_writers = get_init_body_writers(functionalities);
     let init_body_readers = get_init_body_readers(functionalities);
@@ -630,9 +617,9 @@ fn get_consumer_struct_impl(
     quote! {
         impl #struct_name {
             async fn init(
-                participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync<#runtime>,
-                subscriber: &dust_dds::dds_async::subscriber::SubscriberAsync<#runtime>,
-                publisher: &dust_dds::dds_async::publisher::PublisherAsync<#runtime>,
+                participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
+                subscriber: &dust_dds::dds_async::subscriber::SubscriberAsync,
+                publisher: &dust_dds::dds_async::publisher::PublisherAsync,
             ) -> #consumer_struct_name {
                 #(#data_topics_instantiations)*
 

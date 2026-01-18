@@ -5,13 +5,8 @@ use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsy
 use mycelium_computing::core::application::Application;
 use mycelium_computing::{consumes, provides};
 use std::env;
-// Import the desired DUST DDS runtime. By default, DUST DDS provides a standard implementation.
-// The DUST DDS standard runtime depends on the std library. Then is not compatible with no_std.
-use dust_dds::std_runtime::StdRuntime;
 
-// TODO: Allow state via embassy_sync crate
-// Creates a method "person_in_frame", which is used to publish a data piece when needed.
-#[provides(StdRuntime, [
+#[provides([
     RequestResponse("face_recognition", FaceRecognitionRequest, FaceRecognitionResponse),
     Response("available_models", ModelsInfo),
     Continuous("person_in_frame", PersonFrameData),
@@ -21,6 +16,7 @@ struct FaceRecognition;
 // Callbacks implementing the provider functionality
 impl FaceRecognitionProviderTrait for FaceRecognition {
     async fn face_recognition(_input: FaceRecognitionRequest) -> FaceRecognitionResponse {
+        println!("Responding");
         FaceRecognitionResponse {
             model: "dummy".to_string(),
             applied: true,
@@ -33,7 +29,7 @@ impl FaceRecognitionProviderTrait for FaceRecognition {
     }
 }
 
-#[consumes(StdRuntime, [
+#[consumes([
     RequestResponse("face_recognition", FaceRecognitionRequest, FaceRecognitionResponse),
     Response("happy_face_recognition", FaceRecognitionResponse),
     Continuous("person_in_frame", PersonFrameData)

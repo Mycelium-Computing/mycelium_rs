@@ -6,3 +6,6 @@ members = [
     "benchmarking",
     "usage_examples",
 ]
+
+[profile.release]
+debug = true

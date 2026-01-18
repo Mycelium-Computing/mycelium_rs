@@ -1,6 +1,4 @@
 use dust_dds::infrastructure::type_support::{DdsType, TypeSupport};
-use dust_dds::xtypes::deserialize::XTypesDeserialize;
-use dust_dds::xtypes::serialize::XTypesSerialize;
 
 #[derive(DdsType, Debug, Clone)]
 pub struct ProvidedFunctionality {
@@ -24,15 +22,23 @@ pub struct ConsumerDiscovery {
 }
 
 #[derive(DdsType, Debug)]
-pub struct EmptyMessage;
+pub struct EmptyMessage {
+    pub _marker: u8,
+}
+
+impl Default for EmptyMessage {
+    fn default() -> Self {
+        Self { _marker: 0 }
+    }
+}
 
 #[derive(DdsType, Debug)]
-pub struct ProviderExchange<T: TypeSupport + XTypesSerialize + for <'a> XTypesDeserialize<'a> + Send>  {
+pub struct ProviderExchange<T: TypeSupport + Send> {
     pub id: u32,
     pub payload: T,
 }
 
-impl<T: TypeSupport + XTypesSerialize + for <'a> XTypesDeserialize<'a> + Send> ProviderExchange<T> {
+impl<T: TypeSupport + Send> ProviderExchange<T> {
     pub fn new(id: u32, payload: T) -> Self {
         Self { id, payload }
     }

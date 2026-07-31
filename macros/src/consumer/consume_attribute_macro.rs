@@ -59,6 +59,25 @@ fn get_functionalities_writers_attributes(
         .collect()
 }
 
+fn get_functionalities_request_locks_attributes(
+    functionalities: &Functionalities,
+) -> Vec<proc_macro2::TokenStream> {
+    functionalities
+        .functionalities
+        .iter()
+        .filter_map(|functionality| match functionality.kind {
+            FunctionalityKind::RequestResponse | FunctionalityKind::Response => {
+                let name = &functionality.name;
+                let lock_ident = format_ident!("{}_request_lock", name.to_string().to_lowercase());
+                Some(quote! {
+                    #lock_ident: mycelium_computing::futures::lock::Mutex<()>
+                })
+            }
+            FunctionalityKind::Continuous => None,
+        })
+        .collect()
+}
+
 fn generate_continuous_topic(name: &Ident, output_type: &Type) -> proc_macro2::TokenStream {
     let topic_name_str = name.to_string().to_lowercase();
     let topic_var_ident = format_ident!("{}_topic", name.to_string().to_lowercase());
@@ -325,9 +344,15 @@ fn get_functionalities_trait_definitions(
 fn generate_response_wait_logic(
     writer_ident: &Ident,
     reader_ident: &Ident,
+    request_lock_ident: &Ident,
     output_type: &Type,
 ) -> proc_macro2::TokenStream {
     quote! {
+        // DataReaderAsync::set_listener replaces the current listener. Keep
+        // one request per functionality in flight so a later call cannot
+        // drop an earlier request's response sender.
+        let _request_guard = self.#request_lock_ident.lock().await;
+
         let match_timeout = core::time::Duration::new(timeout.sec() as u64, timeout.nanosec());
         if !mycelium_computing::core::qos::wait_for_writer_match(&self.#writer_ident, match_timeout).await {
             return None;
@@ -377,8 +402,10 @@ fn generate_request_response_method(
     output_type: &Type,
     writer_ident: &Ident,
     reader_ident: &Ident,
+    request_lock_ident: &Ident,
 ) -> proc_macro2::TokenStream {
-    let wait_logic = generate_response_wait_logic(writer_ident, reader_ident, output_type);
+    let wait_logic =
+        generate_response_wait_logic(writer_ident, reader_ident, request_lock_ident, output_type);
 
     quote! {
         async fn #name(
@@ -390,7 +417,9 @@ fn generate_request_response_method(
             use mycelium_computing::futures::FutureExt;
 
             let request = mycelium_computing::core::messages::ProviderExchange {
-                id: mycelium_computing::utils::next_request_id(),
+                id: mycelium_computing::utils::next_request_id(
+                    self.#reader_ident.get_instance_handle().await,
+                ),
                 payload: data,
             };
 
@@ -404,8 +433,10 @@ fn generate_response_method(
     output_type: &Type,
     writer_ident: &Ident,
     reader_ident: &Ident,
+    request_lock_ident: &Ident,
 ) -> proc_macro2::TokenStream {
-    let wait_logic = generate_response_wait_logic(writer_ident, reader_ident, output_type);
+    let wait_logic =
+        generate_response_wait_logic(writer_ident, reader_ident, request_lock_ident, output_type);
 
     quote! {
         async fn #name(
@@ -416,7 +447,9 @@ fn generate_response_method(
             use mycelium_computing::futures::FutureExt;
 
             let request = mycelium_computing::core::messages::ProviderExchange {
-                id: mycelium_computing::utils::next_request_id(),
+                id: mycelium_computing::utils::next_request_id(
+                    self.#reader_ident.get_instance_handle().await,
+                ),
                 payload: mycelium_computing::core::messages::EmptyMessage::default(),
             };
 
@@ -449,6 +482,7 @@ fn get_functionalities_trait_implementations(
         let output_type = &f.output_type;
         let writer_ident = format_ident!("{}_writer", name.to_string().to_lowercase());
         let reader_ident = format_ident!("{}_reader", name.to_string().to_lowercase());
+        let request_lock_ident = format_ident!("{}_request_lock", name.to_string().to_lowercase());
 
         match f.kind {
             FunctionalityKind::RequestResponse => {
@@ -459,11 +493,16 @@ fn get_functionalities_trait_implementations(
                     output_type,
                     &writer_ident,
                     &reader_ident,
+                    &request_lock_ident,
                 )
             }
-            FunctionalityKind::Response => {
-                generate_response_method(name, output_type, &writer_ident, &reader_ident)
-            }
+            FunctionalityKind::Response => generate_response_method(
+                name,
+                output_type,
+                &writer_ident,
+                &reader_ident,
+                &request_lock_ident,
+            ),
             _ => unreachable!(),
         }
     });
@@ -483,10 +522,12 @@ fn get_consumer_struct<'a>(
 
     let data_readers_attributes = get_functionalities_readers_attributes(functionalities);
     let data_writers_attributes = get_functionalities_writers_attributes(functionalities);
+    let request_locks_attributes = get_functionalities_request_locks_attributes(functionalities);
 
     let all_attributes: Vec<_> = data_readers_attributes
         .into_iter()
         .chain(data_writers_attributes)
+        .chain(request_locks_attributes)
         .collect();
 
     (
@@ -600,9 +641,12 @@ fn get_struct_init_fields(functionalities: &Functionalities) -> Vec<proc_macro2:
                 let name = &f.name;
                 let writer_ident = format_ident!("{}_writer", name.to_string().to_lowercase());
                 let reader_ident = format_ident!("{}_reader", name.to_string().to_lowercase());
+                let request_lock_ident =
+                    format_ident!("{}_request_lock", name.to_string().to_lowercase());
                 Some(quote! {
                     #writer_ident,
-                    #reader_ident
+                    #reader_ident,
+                    #request_lock_ident: mycelium_computing::futures::lock::Mutex::new(())
                 })
             }
             _ => None,

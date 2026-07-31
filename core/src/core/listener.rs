@@ -1,6 +1,6 @@
 extern crate alloc;
 
-use crate::core::messages::ProviderExchange;
+use crate::core::messages::{ProviderExchange, RequestId};
 use alloc::boxed::Box;
 use core::future::Future;
 use core::pin::Pin;
@@ -9,10 +9,10 @@ use dust_dds::dds_async::data_reader::DataReaderAsync;
 use dust_dds::dds_async::data_reader_listener::DataReaderListener;
 use dust_dds::dds_async::data_writer::DataWriterAsync;
 use dust_dds::dds_async::data_writer_listener::DataWriterListener;
+use dust_dds::dds_async::domain_participant_listener::DomainParticipantListener;
 use dust_dds::dds_async::publisher_listener::PublisherListener;
 use dust_dds::dds_async::subscriber_listener::SubscriberListener;
 use dust_dds::dds_async::topic_listener::TopicListener;
-use dust_dds::domain::domain_participant_listener::DomainParticipantListener;
 use dust_dds::infrastructure::sample_info::{ANY_INSTANCE_STATE, ANY_SAMPLE_STATE, ANY_VIEW_STATE};
 use dust_dds::infrastructure::type_support::TypeSupport;
 
@@ -61,7 +61,7 @@ where
 }
 
 pub struct ProviderResponseListener<T: Send> {
-    pub expected_id: u32,
+    pub expected_id: RequestId,
     pub response_sender: Option<OneshotSender<T>>,
 }
 
@@ -71,14 +71,20 @@ where
 {
     async fn on_data_available(&mut self, reader: DataReaderAsync<ProviderExchange<T>>) {
         let samples = reader
-            .take(100, ANY_SAMPLE_STATE, ANY_VIEW_STATE, ANY_INSTANCE_STATE)
+            // Responses are broadcast to every consumer. Read rather than
+            // take so responses belonging to another in-flight request are
+            // not destructively removed from this reader's cache.
+            .read(
+                i32::MAX,
+                ANY_SAMPLE_STATE,
+                ANY_VIEW_STATE,
+                ANY_INSTANCE_STATE,
+            )
             .await;
 
-        if let Err(_) = samples {
+        let Ok(samples) = samples else {
             return;
-        }
-
-        let samples = samples.unwrap();
+        };
 
         let found = samples
             .into_iter()

@@ -348,16 +348,26 @@ fn generate_response_wait_logic(
     output_type: &Type,
 ) -> proc_macro2::TokenStream {
     quote! {
+        use dust_dds::runtime::Timer;
+
         // DataReaderAsync::set_listener replaces the current listener. Keep
         // one request per functionality in flight so a later call cannot
         // drop an earlier request's response sender.
         let _request_guard = self.#request_lock_ident.lock().await;
 
         let match_timeout = core::time::Duration::new(timeout.sec() as u64, timeout.nanosec());
-        if !mycelium_computing::core::qos::wait_for_writer_match(&self.#writer_ident, match_timeout).await {
+        if !mycelium_computing::core::qos::wait_for_writer_match(
+            &self.#writer_ident,
+            match_timeout,
+            self.timer.clone(),
+        ).await {
             return None;
         }
-        if !mycelium_computing::core::qos::wait_for_reader_match(&self.#reader_ident, match_timeout).await {
+        if !mycelium_computing::core::qos::wait_for_reader_match(
+            &self.#reader_ident,
+            match_timeout,
+            self.timer.clone(),
+        ).await {
             return None;
         }
 
@@ -380,7 +390,8 @@ fn generate_response_wait_logic(
 
         let data_future = async { receiver.await.ok() };
 
-        let timer_future = mycelium_computing::futures_timer::Delay::new(core::time::Duration::new(
+        let mut timer = self.timer.clone();
+        let timer_future = timer.delay(core::time::Duration::new(
             timeout.sec() as u64,
             timeout.nanosec(),
         ));
@@ -411,7 +422,6 @@ fn generate_request_response_method(
             data: #input_type,
             timeout: dust_dds::infrastructure::time::Duration,
         ) -> Option<#output_type> {
-            use dust_dds::runtime::DdsRuntime;
             let request = mycelium_computing::core::messages::ProviderExchange {
                 id: mycelium_computing::utils::next_request_id(
                     self.#reader_ident.get_instance_handle().await,
@@ -439,7 +449,6 @@ fn generate_response_method(
             &self,
             timeout: dust_dds::infrastructure::time::Duration,
         ) -> Option<#output_type> {
-            use dust_dds::runtime::DdsRuntime;
             let request = mycelium_computing::core::messages::ProviderExchange {
                 id: mycelium_computing::utils::next_request_id(
                     self.#reader_ident.get_instance_handle().await,
@@ -517,12 +526,16 @@ fn get_consumer_struct<'a>(
     let data_readers_attributes = get_functionalities_readers_attributes(functionalities);
     let data_writers_attributes = get_functionalities_writers_attributes(functionalities);
     let request_locks_attributes = get_functionalities_request_locks_attributes(functionalities);
+    let runtime = &functionalities.runtime;
 
-    let all_attributes: Vec<_> = data_readers_attributes
+    let mut all_attributes: Vec<_> = data_readers_attributes
         .into_iter()
         .chain(data_writers_attributes)
         .chain(request_locks_attributes)
         .collect();
+    all_attributes.push(quote! {
+        timer: <#runtime as dust_dds::runtime::DdsRuntime>::TimerHandle
+    });
 
     (
         consumer_struct.clone(),
@@ -627,25 +640,29 @@ fn get_init_body_continuous(functionalities: &Functionalities) -> Vec<proc_macro
 
 #[inline(always)]
 fn get_struct_init_fields(functionalities: &Functionalities) -> Vec<proc_macro2::TokenStream> {
-    functionalities
-        .functionalities
-        .iter()
-        .filter_map(|f| match f.kind {
-            FunctionalityKind::RequestResponse | FunctionalityKind::Response => {
-                let name = &f.name;
-                let writer_ident = format_ident!("{}_writer", name.to_string().to_lowercase());
-                let reader_ident = format_ident!("{}_reader", name.to_string().to_lowercase());
-                let request_lock_ident =
-                    format_ident!("{}_request_lock", name.to_string().to_lowercase());
-                Some(quote! {
-                    #writer_ident,
-                    #reader_ident,
-                    #request_lock_ident: mycelium_computing::async_lock::Mutex::new(())
-                })
-            }
-            _ => None,
-        })
-        .collect()
+    let mut fields = vec![quote! { timer }];
+    fields.extend(
+        functionalities
+            .functionalities
+            .iter()
+            .filter_map(|f| match f.kind {
+                FunctionalityKind::RequestResponse | FunctionalityKind::Response => {
+                    let name = &f.name;
+                    let writer_ident = format_ident!("{}_writer", name.to_string().to_lowercase());
+                    let reader_ident = format_ident!("{}_reader", name.to_string().to_lowercase());
+                    let request_lock_ident =
+                        format_ident!("{}_request_lock", name.to_string().to_lowercase());
+                    Some(quote! {
+                        #writer_ident,
+                        #reader_ident,
+                        #request_lock_ident: mycelium_computing::async_lock::Mutex::new(())
+                    })
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+    );
+    fields
 }
 
 fn get_consumer_trait_impl(
@@ -654,6 +671,7 @@ fn get_consumer_trait_impl(
     consumer_struct_name: &Ident,
 ) -> proc_macro2::TokenStream {
     let struct_name_str = struct_name.to_string();
+    let runtime = &functionalities.runtime;
 
     let functionality_definitions: Vec<_> = functionalities
         .functionalities
@@ -686,6 +704,7 @@ fn get_consumer_trait_impl(
 
     quote! {
         impl mycelium_computing::core::module::consumer::ConsumerTrait for #struct_name {
+            type Runtime = #runtime;
             type Handle = #consumer_struct_name;
 
             fn get_consumer_id() -> String {
@@ -700,6 +719,7 @@ fn get_consumer_trait_impl(
                 participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
                 publisher: &dust_dds::dds_async::publisher::PublisherAsync,
                 subscriber: &dust_dds::dds_async::subscriber::SubscriberAsync,
+                timer: <#runtime as dust_dds::runtime::DdsRuntime>::TimerHandle,
             ) -> Self::Handle {
                 #(#data_topics_instantiations)*
 
@@ -721,6 +741,7 @@ fn get_consumer_struct_impl(
     functionalities: &Functionalities,
     consumer_struct_name: &Ident,
 ) -> proc_macro2::TokenStream {
+    let runtime = &functionalities.runtime;
     let data_topics_instantiations = get_functionalities_topics_instantiations(functionalities);
     let init_body_writers = get_init_body_writers(functionalities);
     let init_body_readers = get_init_body_readers(functionalities);
@@ -733,6 +754,7 @@ fn get_consumer_struct_impl(
                 participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
                 subscriber: &dust_dds::dds_async::subscriber::SubscriberAsync,
                 publisher: &dust_dds::dds_async::publisher::PublisherAsync,
+                timer: <#runtime as dust_dds::runtime::DdsRuntime>::TimerHandle,
             ) -> #consumer_struct_name {
                 #(#data_topics_instantiations)*
 

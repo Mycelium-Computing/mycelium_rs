@@ -10,7 +10,7 @@ use crate::common::types::{MathRequest, MathResult};
 #[path = "../common/mod.rs"]
 mod common;
 
-#[consumes([
+#[consumes(dust_dds::std_runtime::StdRuntime, [
     RequestResponse("sum_two_numbers", MathRequest, MathResult)
 ])]
 struct Math;
@@ -19,7 +19,13 @@ async fn init_consumer() {
     let factory =
         DomainParticipantFactoryAsync::<dust_dds::std_runtime::StdRuntime>::get_instance();
 
-    let mut app = Module::new(0, "MathConsumer", factory).await;
+    let mut app = Module::new(
+        0,
+        "MathConsumer",
+        factory,
+        dust_dds::std_runtime::timer::TimerDriver::new().handle(),
+    )
+    .await;
 
     let consumer = app.register_consumer::<Math>().await;
 

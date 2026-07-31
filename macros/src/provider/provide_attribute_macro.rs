@@ -413,6 +413,7 @@ fn get_provider_impl_tokens(
     provider_name: &Ident,
     functionalities: &Functionalities,
 ) -> proc_macro2::TokenStream {
+    let runtime = &functionalities.runtime;
     let mut message_tokens = proc_macro2::TokenStream::new();
     get_functionalities_message_tokens(provider_name, functionalities, &mut message_tokens);
 
@@ -425,6 +426,8 @@ fn get_provider_impl_tokens(
 
     quote::quote! {
         impl mycelium_computing::core::module::provider::ProviderTrait for #provider_name {
+            type Runtime = #runtime;
+
             #continuous_handle_impl
 
             fn get_functionalities() -> mycelium_computing::core::messages::ProviderMessage {

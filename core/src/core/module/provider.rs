@@ -6,6 +6,7 @@ use alloc::string::String;
 use dust_dds::dds_async::domain_participant::DomainParticipantAsync;
 use dust_dds::dds_async::publisher::PublisherAsync;
 use dust_dds::dds_async::subscriber::SubscriberAsync;
+use dust_dds::runtime::DdsRuntime;
 
 /// A marker type for providers that don't have continuous functionalities.
 /// This type is used as the default `ContinuousHandle` when no continuous
@@ -13,6 +14,9 @@ use dust_dds::dds_async::subscriber::SubscriberAsync;
 pub struct NoContinuousHandle;
 
 pub trait ProviderTrait {
+    /// Runtime selected by the `provides` macro.
+    type Runtime: DdsRuntime;
+
     /// The handle type that provides access to continuous functionality writers.
     /// For providers without continuous functionalities, this should be `NoContinuousHandle`.
     type ContinuousHandle;

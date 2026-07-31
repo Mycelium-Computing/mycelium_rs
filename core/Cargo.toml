@@ -7,6 +7,5 @@ edition = "2024"
 async-lock = { version = "3.4.1", default-features = false }
 dust_dds = { version = "0.15.0", default-features = false, features = ["dcps", "rtps"] }
 futures = { version = "0.3.31", default-features = false, features = ["alloc"] }
-futures-timer = "3.0.3"
 futures-channel = { version = "0.3.31", default-features = false, features = ["alloc"]}
 mycelium_computing_macros = { path = "../macros" }

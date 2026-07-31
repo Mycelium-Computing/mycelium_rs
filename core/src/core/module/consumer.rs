@@ -6,8 +6,11 @@ use core::future::Future;
 use dust_dds::dds_async::domain_participant::DomainParticipantAsync;
 use dust_dds::dds_async::publisher::PublisherAsync;
 use dust_dds::dds_async::subscriber::SubscriberAsync;
+use dust_dds::runtime::DdsRuntime;
 
 pub trait ConsumerTrait {
+    /// Runtime selected by the `consumes` macro.
+    type Runtime: DdsRuntime;
     type Handle;
 
     fn get_consumer_id() -> String;
@@ -18,5 +21,6 @@ pub trait ConsumerTrait {
         participant: &DomainParticipantAsync,
         publisher: &PublisherAsync,
         subscriber: &SubscriberAsync,
+        timer: <Self::Runtime as DdsRuntime>::TimerHandle,
     ) -> impl Future<Output = Self::Handle>;
 }

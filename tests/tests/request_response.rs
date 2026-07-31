@@ -12,7 +12,7 @@ struct Number {
     value: f32,
 }
 
-#[provides([
+#[provides(dust_dds::std_runtime::StdRuntime, [
     RequestResponse("add_two_ints", ArithmeticRequest, Number)
 ])]
 struct CalculatorProvider;
@@ -26,7 +26,7 @@ impl CalculatorProviderProviderTrait for CalculatorProvider {
     }
 }
 
-#[consumes([
+#[consumes(dust_dds::std_runtime::StdRuntime, [
     RequestResponse("add_two_ints", ArithmeticRequest, Number),
 ])]
 struct CalculatorConsumer;
@@ -49,7 +49,13 @@ mod tests {
         let handle = std::thread::spawn(|| {
             smol::block_on(async {
                 let factory = DomainParticipantFactoryAsync::get_instance();
-                let mut app = Module::new(150, "test_provider", factory).await;
+                let mut app = Module::new(
+                    150,
+                    "test_provider",
+                    factory,
+                    dust_dds::std_runtime::timer::TimerDriver::new().handle(),
+                )
+                .await;
                 app.register_provider::<CalculatorProvider>().await;
 
                 Timer::after(Duration::new(2, 0)).await;
@@ -60,7 +66,13 @@ mod tests {
 
         async fn test_consumer() -> f32 {
             let factory = DomainParticipantFactoryAsync::get_instance();
-            let mut app = Module::new(150, "test_consumer", factory).await;
+            let mut app = Module::new(
+                150,
+                "test_consumer",
+                factory,
+                dust_dds::std_runtime::timer::TimerDriver::new().handle(),
+            )
+            .await;
 
             let consumer = app.register_consumer::<CalculatorConsumer>().await;
 

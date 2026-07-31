@@ -8,6 +8,7 @@ use dust_dds::infrastructure::qos_policy::{
 };
 use dust_dds::infrastructure::time::DurationKind;
 use dust_dds::infrastructure::type_support::TypeSupport;
+use dust_dds::runtime::Timer;
 use futures::future::select;
 
 pub fn reliable_writer_qos() -> DataWriterQos {
@@ -42,11 +43,17 @@ pub fn reliable_reader_qos() -> DataReaderQos {
     }
 }
 
-pub async fn wait_for_writer_match<T: TypeSupport>(
+pub async fn wait_for_writer_match<T, TimerHandle>(
     writer: &DataWriterAsync<T>,
     timeout: Duration,
-) -> bool {
-    let match_check = async {
+    timer: TimerHandle,
+) -> bool
+where
+    T: TypeSupport,
+    TimerHandle: Timer + Clone + Send + Sync + 'static,
+{
+    let mut match_timer = timer.clone();
+    let match_check = async move {
         loop {
             let status = writer.get_publication_matched_status().await;
 
@@ -56,11 +63,12 @@ pub async fn wait_for_writer_match<T: TypeSupport>(
                 }
             }
 
-            futures_timer::Delay::new(Duration::from_millis(10)).await;
+            match_timer.delay(Duration::from_millis(10)).await;
         }
     };
 
-    let timeout_future = futures_timer::Delay::new(timeout);
+    let mut timeout_timer = timer;
+    let timeout_future = timeout_timer.delay(timeout);
 
     futures::pin_mut!(match_check, timeout_future);
 
@@ -70,11 +78,17 @@ pub async fn wait_for_writer_match<T: TypeSupport>(
     }
 }
 
-pub async fn wait_for_reader_match<T: TypeSupport>(
+pub async fn wait_for_reader_match<T, TimerHandle>(
     reader: &DataReaderAsync<T>,
     timeout: Duration,
-) -> bool {
-    let match_check = async {
+    timer: TimerHandle,
+) -> bool
+where
+    T: TypeSupport,
+    TimerHandle: Timer + Clone + Send + Sync + 'static,
+{
+    let mut match_timer = timer.clone();
+    let match_check = async move {
         loop {
             let status = reader.get_subscription_matched_status().await;
 
@@ -84,11 +98,12 @@ pub async fn wait_for_reader_match<T: TypeSupport>(
                 }
             }
 
-            futures_timer::Delay::new(Duration::from_millis(10)).await;
+            match_timer.delay(Duration::from_millis(10)).await;
         }
     };
 
-    let timeout_future = futures_timer::Delay::new(timeout);
+    let mut timeout_timer = timer;
+    let timeout_future = timeout_timer.delay(timeout);
 
     futures::pin_mut!(match_check, timeout_future);
 

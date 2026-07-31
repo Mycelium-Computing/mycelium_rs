@@ -6,7 +6,7 @@ use mycelium_computing::core::module::Module;
 use mycelium_computing::{consumes, provides};
 use std::env;
 
-#[provides([
+#[provides(dust_dds::std_runtime::StdRuntime, [
     RequestResponse("face_recognition", FaceRecognitionRequest, FaceRecognitionResponse),
     Response("available_models", ModelsInfo),
     Continuous("person_in_frame", PersonFrameData),
@@ -29,7 +29,7 @@ impl FaceRecognitionProviderTrait for FaceRecognition {
     }
 }
 
-#[consumes([
+#[consumes(dust_dds::std_runtime::StdRuntime, [
     RequestResponse("face_recognition", FaceRecognitionRequest, FaceRecognitionResponse),
     Response("happy_face_recognition", FaceRecognitionResponse),
     Continuous("person_in_frame", PersonFrameData)
@@ -47,7 +47,13 @@ impl FaceRecognitionProxyContinuosTrait for FaceRecognitionProxy {
 
 async fn provider() {
     let factory = DomainParticipantFactoryAsync::get_instance();
-    let mut app = Module::new(0, "JustASumService", factory).await;
+    let mut app = Module::new(
+        0,
+        "JustASumService",
+        factory,
+        dust_dds::std_runtime::timer::TimerDriver::new().handle(),
+    )
+    .await;
 
     app.register_provider::<FaceRecognition>().await;
 
@@ -56,7 +62,13 @@ async fn provider() {
 
 async fn consumer() {
     let factory = DomainParticipantFactoryAsync::get_instance();
-    let mut app = Module::new(0, "FaceRecognitionProxyApp", factory).await;
+    let mut app = Module::new(
+        0,
+        "FaceRecognitionProxyApp",
+        factory,
+        dust_dds::std_runtime::timer::TimerDriver::new().handle(),
+    )
+    .await;
 
     let consumer = app.register_consumer::<FaceRecognitionProxy>().await;
 

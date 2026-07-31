@@ -5,10 +5,6 @@ pub mod futures {
     pub use futures::*;
 }
 
-pub mod futures_timer {
-    pub use futures_timer::*;
-}
-
 pub mod async_lock {
     pub use ::async_lock::*;
 }

@@ -11,7 +11,7 @@ use smol::Timer;
 use crate::common::types::{MathRequest, MathResult};
 
 /// Provider implementation for benchmarking
-#[provides([
+#[provides(dust_dds::std_runtime::StdRuntime, [
     RequestResponse("sum_two_numbers", MathRequest, MathResult)
 ])]
 struct Math;
@@ -26,7 +26,13 @@ impl MathProviderTrait for Math {
 
 async fn run_provider(domain_id: u32) {
     let factory = DomainParticipantFactoryAsync::get_instance();
-    let mut app = Module::new(domain_id, "BenchmarkProvider", factory).await;
+    let mut app = Module::new(
+        domain_id,
+        "BenchmarkProvider",
+        factory,
+        dust_dds::std_runtime::timer::TimerDriver::new().handle(),
+    )
+    .await;
     app.register_provider::<Math>().await;
 
     Timer::after(Duration::from_secs(10)).await;

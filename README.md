@@ -96,6 +96,7 @@ Use the `#[consumes]` macro to define a service consumer:
 
 ```rust
 use mycelium_computing::consumes;
+use dust_dds::std_runtime::StdRuntime;
 
 #[consumes(StdRuntime, [
     RequestResponse("add_two_ints", ArithmeticRequest, Number),
@@ -117,11 +118,19 @@ impl CalculatorConsumerContinuosTrait for CalculatorConsumer {
 
 ```rust
 use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
+use dust_dds::std_runtime::timer::TimerDriver;
 use mycelium_computing::core::module::Module;
 
 async fn run_provider() {
     let factory = DomainParticipantFactoryAsync::get_instance();
-    let mut app = Module::new(0, "CalculatorService", factory).await;
+    let timer_driver = TimerDriver::new();
+    let mut app = Module::new(
+        0,
+        "CalculatorService",
+        factory,
+        timer_driver.handle(),
+    )
+    .await;
     
     // Register provider and get handle for continuous data
     let continuous_handle = app.register_provider::<CalculatorProvider>().await;
@@ -137,23 +146,22 @@ async fn run_provider() {
 **Consumer Module:**
 
 ```rust
+use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
+use dust_dds::std_runtime::timer::TimerDriver;
+use mycelium_computing::core::module::Module;
+
 async fn run_consumer() {
     let factory = DomainParticipantFactoryAsync::get_instance();
-    
-    let participant = factory
-        .create_participant(0, QosKind::Default, NO_LISTENER, NO_STATUS)
-        .await.unwrap();
-        
-    let subscriber = participant
-        .create_subscriber(QosKind::Default, NO_LISTENER, NO_STATUS)
-        .await.unwrap();
-        
-    let publisher = participant
-        .create_publisher(QosKind::Default, NO_LISTENER, NO_STATUS)
-        .await.unwrap();
-    
-    // Initialize the consumer proxy
-    let consumer = CalculatorConsumer::init(&participant, &subscriber, &publisher).await;
+    let timer_driver = TimerDriver::new();
+    let mut app = Module::new(
+        0,
+        "CalculatorService",
+        factory,
+        timer_driver.handle(),
+    )
+    .await;
+
+    let consumer = app.register_consumer::<CalculatorConsumer>().await;
     
     // Make a request with timeout
     let result = consumer
@@ -243,7 +251,6 @@ cargo run --bin continuous_consumer
 |------------|---------|---------|
 | dust_dds | 0.13.0 | DDS middleware implementation |
 | futures | 0.3.31 | Async utilities |
-| futures-timer | 3.0.3 | Async timing |
 | proc-macro2 | 1.0.103 | Procedural macro support |
 | quote | 1.0.41 | Code generation |
 | syn | 2.0.108 | Rust syntax parsing |

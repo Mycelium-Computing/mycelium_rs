@@ -8,12 +8,12 @@ struct Number {
     value: i32,
 }
 
-#[provides([
+#[provides(dust_dds::std_runtime::StdRuntime, [
     Continuous("integer", Number)
 ])]
 struct NumberGenerator;
 
-#[consumes([
+#[consumes(dust_dds::std_runtime::StdRuntime, [
     Continuous("integer", Number)
 ])]
 struct NumberReceiver;
@@ -49,8 +49,13 @@ mod tests {
 
     async fn provider_application() {
         let domain_participant_factory = DomainParticipantFactoryAsync::get_instance();
-        let mut application =
-            Module::new(150, "test_application", domain_participant_factory).await;
+        let mut application = Module::new(
+            150,
+            "test_application",
+            domain_participant_factory,
+            dust_dds::std_runtime::timer::TimerDriver::new().handle(),
+        )
+        .await;
 
         let continuous_handle = application.register_provider::<NumberGenerator>().await;
 
@@ -66,7 +71,13 @@ mod tests {
 
     async fn consumer_application() {
         let factory = DomainParticipantFactoryAsync::get_instance();
-        let mut app = Module::new(150, "test_consumer", factory).await;
+        let mut app = Module::new(
+            150,
+            "test_consumer",
+            factory,
+            dust_dds::std_runtime::timer::TimerDriver::new().handle(),
+        )
+        .await;
 
         let _ = app.register_consumer::<NumberReceiver>().await;
         Timer::after(Duration::from_secs(2)).await;

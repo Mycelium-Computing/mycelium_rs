@@ -8,6 +8,7 @@ use dust_dds::infrastructure::qos_policy::{
 };
 use dust_dds::infrastructure::time::DurationKind;
 use dust_dds::infrastructure::type_support::TypeSupport;
+use futures::future::select;
 
 pub fn reliable_writer_qos() -> DataWriterQos {
     DataWriterQos {
@@ -45,8 +46,6 @@ pub async fn wait_for_writer_match<T: TypeSupport>(
     writer: &DataWriterAsync<T>,
     timeout: Duration,
 ) -> bool {
-    use futures::FutureExt;
-
     let match_check = async {
         loop {
             let status = writer.get_publication_matched_status().await;
@@ -59,17 +58,15 @@ pub async fn wait_for_writer_match<T: TypeSupport>(
 
             futures_timer::Delay::new(Duration::from_millis(10)).await;
         }
-    }
-    .fuse();
+    };
 
-    let timeout_future = futures_timer::Delay::new(timeout).fuse();
+    let timeout_future = futures_timer::Delay::new(timeout);
 
-    futures::pin_mut!(match_check);
-    futures::pin_mut!(timeout_future);
+    futures::pin_mut!(match_check, timeout_future);
 
-    futures::select! {
-        result = match_check => result,
-        _ = timeout_future => false,
+    match select(match_check, timeout_future).await {
+        futures::future::Either::Left((result, _)) => result,
+        futures::future::Either::Right(_) => false,
     }
 }
 
@@ -77,8 +74,6 @@ pub async fn wait_for_reader_match<T: TypeSupport>(
     reader: &DataReaderAsync<T>,
     timeout: Duration,
 ) -> bool {
-    use futures::FutureExt;
-
     let match_check = async {
         loop {
             let status = reader.get_subscription_matched_status().await;
@@ -91,16 +86,14 @@ pub async fn wait_for_reader_match<T: TypeSupport>(
 
             futures_timer::Delay::new(Duration::from_millis(10)).await;
         }
-    }
-    .fuse();
+    };
 
-    let timeout_future = futures_timer::Delay::new(timeout).fuse();
+    let timeout_future = futures_timer::Delay::new(timeout);
 
-    futures::pin_mut!(match_check);
-    futures::pin_mut!(timeout_future);
+    futures::pin_mut!(match_check, timeout_future);
 
-    futures::select! {
-        result = match_check => result,
-        _ = timeout_future => false,
+    match select(match_check, timeout_future).await {
+        futures::future::Either::Left((result, _)) => result,
+        futures::future::Either::Right(_) => false,
     }
 }

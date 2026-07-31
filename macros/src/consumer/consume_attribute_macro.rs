@@ -70,7 +70,7 @@ fn get_functionalities_request_locks_attributes(
                 let name = &functionality.name;
                 let lock_ident = format_ident!("{}_request_lock", name.to_string().to_lowercase());
                 Some(quote! {
-                    #lock_ident: mycelium_computing::futures::lock::Mutex<()>
+                    #lock_ident: mycelium_computing::async_lock::Mutex<()>
                 })
             }
             FunctionalityKind::Continuous => None,
@@ -378,20 +378,18 @@ fn generate_response_wait_logic(
             .await
             .unwrap();
 
-        let data_future = async { receiver.await.ok() }.fuse();
+        let data_future = async { receiver.await.ok() };
 
         let timer_future = mycelium_computing::futures_timer::Delay::new(core::time::Duration::new(
             timeout.sec() as u64,
             timeout.nanosec(),
-        ))
-        .fuse();
+        ));
 
-        mycelium_computing::futures::pin_mut!(data_future);
-        mycelium_computing::futures::pin_mut!(timer_future);
+        mycelium_computing::futures::pin_mut!(data_future, timer_future);
 
-        mycelium_computing::futures::select! {
-            res = data_future => res,
-            _ = timer_future => None,
+        match mycelium_computing::futures::future::select(data_future, timer_future).await {
+            mycelium_computing::futures::future::Either::Left((res, _)) => res,
+            mycelium_computing::futures::future::Either::Right(_) => None,
         }
     }
 }
@@ -414,8 +412,6 @@ fn generate_request_response_method(
             timeout: dust_dds::infrastructure::time::Duration,
         ) -> Option<#output_type> {
             use dust_dds::runtime::DdsRuntime;
-            use mycelium_computing::futures::FutureExt;
-
             let request = mycelium_computing::core::messages::ProviderExchange {
                 id: mycelium_computing::utils::next_request_id(
                     self.#reader_ident.get_instance_handle().await,
@@ -444,8 +440,6 @@ fn generate_response_method(
             timeout: dust_dds::infrastructure::time::Duration,
         ) -> Option<#output_type> {
             use dust_dds::runtime::DdsRuntime;
-            use mycelium_computing::futures::FutureExt;
-
             let request = mycelium_computing::core::messages::ProviderExchange {
                 id: mycelium_computing::utils::next_request_id(
                     self.#reader_ident.get_instance_handle().await,
@@ -646,7 +640,7 @@ fn get_struct_init_fields(functionalities: &Functionalities) -> Vec<proc_macro2:
                 Some(quote! {
                     #writer_ident,
                     #reader_ident,
-                    #request_lock_ident: mycelium_computing::futures::lock::Mutex::new(())
+                    #request_lock_ident: mycelium_computing::async_lock::Mutex::new(())
                 })
             }
             _ => None,

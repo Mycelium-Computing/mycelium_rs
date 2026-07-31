@@ -9,6 +9,10 @@ pub mod futures_timer {
     pub use futures_timer::*;
 }
 
+pub mod async_lock {
+    pub use ::async_lock::*;
+}
+
 pub mod core;
 pub mod utils;
 pub use mycelium_computing_macros::*;

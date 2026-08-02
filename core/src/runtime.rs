@@ -2,8 +2,7 @@
 //!
 //! [`RuntimeContext`] deliberately remains coupled to DustDDS. A context chooses the
 //! [`dust_dds::runtime::DdsRuntime`] used by the participant factory and supplies the
-//! framework primitives that DustDDS does not expose publicly. The concrete
-//! standard-runtime implementation is added separately; this module currently defines
+//! framework primitives that DustDDS does not expose publicly. This module currently defines
 //! factory access plus the timer, mutex, and future-selection contracts needed by core.
 
 use core::future::Future;

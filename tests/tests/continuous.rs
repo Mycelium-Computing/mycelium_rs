@@ -42,7 +42,7 @@ mod tests {
     use std::time::Duration;
 
     use mycelium_computing::core::module::Module;
-    use mycelium_computing_std::StdRuntimeContext;
+    use mycelium_computing::runtimes::StdRuntimeContext;
     use smol::Timer;
 
     use crate::{Number, NumberGenerator, NumberReceiver, STATE_INSTANCE};

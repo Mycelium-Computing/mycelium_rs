@@ -2,8 +2,8 @@ mod example_messages;
 
 use crate::example_messages::face_recognition::*;
 use mycelium_computing::core::module::Module;
+use mycelium_computing::runtimes::StdRuntimeContext;
 use mycelium_computing::{consumes, provides};
-use mycelium_computing_std::StdRuntimeContext;
 use std::env;
 
 #[provides(dust_dds::std_runtime::StdRuntime, [

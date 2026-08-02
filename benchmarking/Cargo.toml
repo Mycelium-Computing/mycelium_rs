@@ -4,8 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-mycelium_computing = { path = "../core" }
-mycelium_computing_std = { path = "../std_runtime" }
+mycelium_computing = { path = "../core", features = ["std_runtime"] }
 dust_dds = { version = "0.15.0" }
 rand = "0.10.0-rc.5"
 smol = "2.0.2"

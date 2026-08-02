@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "core",
-    "std_runtime",
     "macros",
     "tests",
     "benchmarking",

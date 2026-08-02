@@ -3,6 +3,10 @@ name = "mycelium_computing"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+std_runtime = ["dust_dds/std", "dust_dds/rtps_udp_transport"]
+
 [dependencies]
 async-lock = { version = "3.4.1", default-features = false }
 dust_dds = { version = "0.15.0", default-features = false, features = ["dcps", "rtps"] }

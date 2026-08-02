@@ -1,16 +1,9 @@
-#![forbid(unsafe_code)]
-#![cfg_attr(not(feature = "std"), no_std)]
-
 use core::future::Future;
 
-use mycelium_computing::runtime_context::RuntimeMutex;
-
-#[cfg(feature = "std")]
+use crate::runtime_context::{MutexOf, RuntimeContext, RuntimeMutex, SelectResult, TimerHandleOf};
 use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
-#[cfg(feature = "std")]
-use mycelium_computing::runtime_context::{MutexOf, RuntimeContext, SelectResult, TimerHandleOf};
 
-/// An asynchronous mutex adapter for the standard runtime package.
+/// An asynchronous mutex adapter for the standard runtime.
 pub struct StdMutex<T>(async_lock::Mutex<T>);
 
 impl<T> StdMutex<T> {
@@ -53,13 +46,11 @@ where
 /// DustDDS exposes the runtime as a type parameter rather than exposing that singleton's
 /// runtime instance. Consequently, this context guarantees type compatibility with the
 /// factory, while its framework timer is a separately owned standard timer driver.
-#[cfg(feature = "std")]
 pub struct StdRuntimeContext {
     factory: &'static DomainParticipantFactoryAsync<dust_dds::std_runtime::StdRuntime>,
     timer_driver: dust_dds::std_runtime::timer::TimerDriver,
 }
 
-#[cfg(feature = "std")]
 impl StdRuntimeContext {
     /// Creates a standard runtime context.
     #[must_use]
@@ -71,14 +62,12 @@ impl StdRuntimeContext {
     }
 }
 
-#[cfg(feature = "std")]
 impl Default for StdRuntimeContext {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(feature = "std")]
 impl RuntimeContext for StdRuntimeContext {
     type DdsRuntime = dust_dds::std_runtime::StdRuntime;
     type Mutex<T: Send + 'static> = StdMutex<T>;

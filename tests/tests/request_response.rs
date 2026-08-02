@@ -37,7 +37,7 @@ mod tests {
 
     use futures::FutureExt;
     use mycelium_computing::core::module::Module;
-    use mycelium_computing_std::StdRuntimeContext;
+    use mycelium_computing::runtimes::StdRuntimeContext;
     use smol::Timer;
 
     use crate::{

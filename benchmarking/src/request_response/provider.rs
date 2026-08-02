@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use mycelium_computing::core::module::Module;
 use mycelium_computing::provides;
-use mycelium_computing_std::StdRuntimeContext;
+use mycelium_computing::runtimes::StdRuntimeContext;
 use smol::Timer;
 
 use crate::common::types::{MathRequest, MathResult};

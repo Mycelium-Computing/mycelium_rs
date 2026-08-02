@@ -10,6 +10,7 @@ pub mod async_lock {
 }
 
 pub mod core;
+pub mod runtime;
 pub mod utils;
 pub use mycelium_computing_macros::*;
 

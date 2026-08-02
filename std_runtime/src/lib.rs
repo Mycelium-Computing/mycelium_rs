@@ -3,12 +3,12 @@
 
 use core::future::Future;
 
-use mycelium_computing::runtime::RuntimeMutex;
+use mycelium_computing::runtime_context::RuntimeMutex;
 
 #[cfg(feature = "std")]
 use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
 #[cfg(feature = "std")]
-use mycelium_computing::runtime::{MutexOf, RuntimeContext, SelectResult, TimerHandleOf};
+use mycelium_computing::runtime_context::{MutexOf, RuntimeContext, SelectResult, TimerHandleOf};
 
 /// An asynchronous mutex adapter for the standard runtime package.
 pub struct StdMutex<T>(async_lock::Mutex<T>);

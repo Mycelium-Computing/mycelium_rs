@@ -1,9 +1,7 @@
-use dust_dds::{
-    dds_async::domain_participant_factory::DomainParticipantFactoryAsync,
-    infrastructure::time::Duration,
-};
+use dust_dds::infrastructure::time::Duration;
 use mycelium_computing::consumes;
 use mycelium_computing::core::module::Module;
+use mycelium_computing_std::StdRuntimeContext;
 
 use crate::common::types::{MathRequest, MathResult};
 
@@ -16,16 +14,7 @@ mod common;
 struct Math;
 
 async fn init_consumer() {
-    let factory =
-        DomainParticipantFactoryAsync::<dust_dds::std_runtime::StdRuntime>::get_instance();
-
-    let mut app = Module::new(
-        0,
-        "MathConsumer",
-        factory,
-        dust_dds::std_runtime::timer::TimerDriver::new().handle(),
-    )
-    .await;
+    let mut app = Module::new(0, "MathConsumer", StdRuntimeContext::new()).await;
 
     let consumer = app.register_consumer::<Math>().await;
 

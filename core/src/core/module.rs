@@ -11,21 +11,22 @@ use crate::core::messages::{ConsumerDiscovery, ProviderMessage};
 use crate::core::module::consumer::ConsumerTrait;
 use crate::core::module::provider::ProviderTrait;
 use crate::core::qos::{reliable_reader_qos, reliable_writer_qos};
+use crate::runtime_context::RuntimeContext;
 use crate::utils::storage::ExecutionObjects;
-use alloc::string::{String, ToString};
-use core::time::Duration as StdDuration;
+use core::time::Duration;
 use dust_dds::dds_async::data_reader::DataReaderAsync;
 use dust_dds::dds_async::data_writer::DataWriterAsync;
 use dust_dds::dds_async::domain_participant::DomainParticipantAsync;
-use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
 use dust_dds::dds_async::publisher::PublisherAsync;
 use dust_dds::dds_async::subscriber::SubscriberAsync;
 use dust_dds::infrastructure::qos::QosKind;
 use dust_dds::infrastructure::status::{NO_STATUS, StatusKind};
-use dust_dds::infrastructure::time::Duration;
-use dust_dds::runtime::{DdsRuntime, Timer};
+use dust_dds::infrastructure::time::Duration as DdsDuration;
+use dust_dds::runtime::Timer;
 
-pub struct Module<R: DdsRuntime> {
+use alloc::string::{String, ToString};
+
+pub struct Module<C: RuntimeContext> {
     name: String,
     pub participant: DomainParticipantAsync,
     pub publisher: PublisherAsync,
@@ -35,10 +36,10 @@ pub struct Module<R: DdsRuntime> {
     consumer_discovery_writer: DataWriterAsync<ConsumerDiscovery>,
     consumer_discovery_reader: DataReaderAsync<ConsumerDiscovery>,
     objects_storage: ExecutionObjects,
-    timer: R::TimerHandle,
+    context: C,
 }
 
-impl<R: DdsRuntime> Module<R> {
+impl<C: RuntimeContext> Module<C> {
     pub async fn run_forever(&self) {
         core::future::pending::<()>().await;
     }
@@ -66,12 +67,12 @@ impl<R: DdsRuntime> Module<R> {
                 }
             }
 
-            let mut timer = self.timer.clone();
-            timer.delay(StdDuration::from_millis(10)).await;
+            let mut timer = self.context.timer();
+            timer.delay(Duration::from_millis(10)).await;
         }
 
         self.provider_registration_reader
-            .wait_for_historical_data(Duration::new(5, 0))
+            .wait_for_historical_data(DdsDuration::new(5, 0))
             .await
             .ok();
     }
@@ -91,12 +92,12 @@ impl<R: DdsRuntime> Module<R> {
                 }
             }
 
-            let mut timer = self.timer.clone();
-            timer.delay(StdDuration::from_millis(10)).await;
+            let mut timer = self.context.timer();
+            timer.delay(Duration::from_millis(10)).await;
         }
 
         self.consumer_discovery_reader
-            .wait_for_historical_data(Duration::new(5, 0))
+            .wait_for_historical_data(DdsDuration::new(5, 0))
             .await
             .ok();
     }
@@ -109,7 +110,7 @@ impl<R: DdsRuntime> Module<R> {
     /// For providers without continuous functionalities, this returns `NoContinuousHandle`.
     pub async fn register_provider<P>(&mut self) -> P::ContinuousHandle
     where
-        P: ProviderTrait<Runtime = R>,
+        P: ProviderTrait<Runtime = C::DdsRuntime>,
     {
         let functionalities = P::get_functionalities();
 
@@ -132,12 +133,12 @@ impl<R: DdsRuntime> Module<R> {
         P::create_continuous_handle(&self.participant, &self.publisher).await
     }
 
-    pub async fn register_consumer<C>(&mut self) -> C::Handle
+    pub async fn register_consumer<Consumer>(&mut self) -> Consumer::Handle
     where
-        C: ConsumerTrait<Runtime = R>,
+        Consumer: ConsumerTrait<Runtime = C::DdsRuntime>,
     {
-        let consumer_id = C::get_consumer_id();
-        let functionalities = C::get_requested_functionalities();
+        let consumer_id = Consumer::get_consumer_id();
+        let functionalities = Consumer::get_requested_functionalities();
 
         for functionality in functionalities {
             self.consumer_discovery_writer
@@ -152,28 +153,22 @@ impl<R: DdsRuntime> Module<R> {
                 .unwrap();
         }
 
-        C::create_handle(
+        Consumer::create_handle(
             &self.participant,
             &self.publisher,
             &self.subscriber,
-            self.timer.clone(),
+            self.context.timer(),
         )
         .await
     }
 
-    /// Creates a module using the supplied participant factory and its
-    /// runtime timer handle.
+    /// Creates a module from the supplied runtime context.
     ///
-    /// The timer must come from the same `R` runtime used to create the
-    /// participant factory. Keeping it as an argument allows custom DDS
-    /// runtimes to provide their own timer implementation.
-    pub async fn new(
-        domain_id: u32,
-        name: &str,
-        participant_factory: &'static DomainParticipantFactoryAsync<R>,
-        timer: R::TimerHandle,
-    ) -> Self {
-        let participant = participant_factory
+    /// The context supplies the participant factory and framework timer, ensuring that both
+    /// are selected consistently for the module's runtime.
+    pub async fn new(domain_id: u32, name: &str, context: C) -> Self {
+        let participant = context
+            .get_dds_factory()
             .create_participant(
                 domain_id as i32,
                 QosKind::Default,
@@ -267,7 +262,7 @@ impl<R: DdsRuntime> Module<R> {
             consumer_discovery_writer,
             consumer_discovery_reader,
             objects_storage,
-            timer,
+            context,
         }
     }
 }

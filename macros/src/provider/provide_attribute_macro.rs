@@ -133,6 +133,7 @@ fn get_create_continuous_handle_impl_tokens(
             async fn create_continuous_handle(
                 _participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
                 _publisher: &dust_dds::dds_async::publisher::PublisherAsync,
+                _context: &C,
             ) -> Self::ContinuousHandle {
                 mycelium_computing::core::module::provider::NoContinuousHandle
             }
@@ -189,6 +190,7 @@ fn get_create_continuous_handle_impl_tokens(
         async fn create_continuous_handle(
             participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
             publisher: &dust_dds::dds_async::publisher::PublisherAsync,
+            _context: &C,
         ) -> Self::ContinuousHandle {
             #(#topic_creations)*
             #(#writer_creations)*
@@ -256,7 +258,7 @@ fn get_functionalities_message_tokens(
     tokens.extend(quote! {
         mycelium_computing::core::messages::ProviderMessage {
             provider_name: #provider_name.to_string(),
-            functionalities: vec![
+            functionalities: mycelium_computing::alloc::vec![
                 #(#functionalities_messages),*
             ],
         }
@@ -347,8 +349,8 @@ fn get_functionality_channel_tokens(
     let listener_tokens = quote! {
         let listener = mycelium_computing::core::listener::RequestListener {
             writer,
-            implementation: Box::new(|request: mycelium_computing::core::messages::ProviderExchange<#input_type>| {
-                Box::pin(async move {
+            implementation: mycelium_computing::alloc::boxed::Box::new(|request: mycelium_computing::core::messages::ProviderExchange<#input_type>| {
+                mycelium_computing::alloc::boxed::Box::pin(async move {
                     let result = #method_call;
                     mycelium_computing::core::messages::ProviderExchange {
                         id: request.id,
@@ -402,7 +404,7 @@ fn get_functionalities_channel_tokens(
         .map(|functionality| get_functionality_channel_tokens(&provider_name, functionality));
 
     tokens.extend(quote! {
-        match functionality_name.as_str() {
+        match functionality_name.as_str() { // TODO: Change this match to something faster than Strings (i.e. Enum)
             #(#functionalities_channel_branches,)*
             _ => panic!("Unknown functionality {:?}", functionality_name),
         }
@@ -424,19 +426,25 @@ fn get_provider_impl_tokens(
         get_create_continuous_handle_impl_tokens(provider_name, functionalities);
 
     quote::quote! {
-        impl mycelium_computing::core::module::provider::ProviderTrait for #provider_name {
+        impl<C: mycelium_computing::runtime_context::RuntimeContext>
+            mycelium_computing::core::module::provider::ProviderTrait<C> for #provider_name
+        {
+
             #continuous_handle_impl
 
             fn get_functionalities() -> mycelium_computing::core::messages::ProviderMessage {
+                use mycelium_computing::alloc::string::ToString;
+
                 #message_tokens
             }
 
             async fn create_execution_objects(
-                functionality_name: String,
+                functionality_name: mycelium_computing::alloc::string::String,
                 participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
                 publisher: &dust_dds::dds_async::publisher::PublisherAsync,
                 subscriber: &dust_dds::dds_async::subscriber::SubscriberAsync,
                 storage: &mut mycelium_computing::utils::storage::ExecutionObjects,
+                _context: &C,
             ) {
                 #channel_tokens
             }

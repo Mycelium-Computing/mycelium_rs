@@ -41,16 +41,14 @@ impl NumberReceiverContinuosTrait for NumberReceiver {
 mod tests {
     use std::time::Duration;
 
-    use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
     use mycelium_computing::core::module::Module;
+    use mycelium_computing::runtimes::StdRuntimeContext;
     use smol::Timer;
 
     use crate::{Number, NumberGenerator, NumberReceiver, STATE_INSTANCE};
 
     async fn provider_application() {
-        let domain_participant_factory = DomainParticipantFactoryAsync::get_instance();
-        let mut application =
-            Module::new(150, "test_application", domain_participant_factory).await;
+        let mut application = Module::new(150, "test_application", StdRuntimeContext::new()).await;
 
         let continuous_handle = application.register_provider::<NumberGenerator>().await;
 
@@ -65,8 +63,7 @@ mod tests {
     }
 
     async fn consumer_application() {
-        let factory = DomainParticipantFactoryAsync::get_instance();
-        let mut app = Module::new(150, "test_consumer", factory).await;
+        let mut app = Module::new(150, "test_consumer", StdRuntimeContext::new()).await;
 
         let _ = app.register_consumer::<NumberReceiver>().await;
         Timer::after(Duration::from_secs(2)).await;

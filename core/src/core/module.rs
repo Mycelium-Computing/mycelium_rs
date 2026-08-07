@@ -11,21 +11,22 @@ use crate::core::messages::{ConsumerDiscovery, ProviderMessage};
 use crate::core::module::consumer::ConsumerTrait;
 use crate::core::module::provider::ProviderTrait;
 use crate::core::qos::{reliable_reader_qos, reliable_writer_qos};
+use crate::runtime_context::RuntimeContext;
 use crate::utils::storage::ExecutionObjects;
-use alloc::string::{String, ToString};
-use core::time::Duration as StdDuration;
+use core::time::Duration;
 use dust_dds::dds_async::data_reader::DataReaderAsync;
 use dust_dds::dds_async::data_writer::DataWriterAsync;
 use dust_dds::dds_async::domain_participant::DomainParticipantAsync;
-use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
 use dust_dds::dds_async::publisher::PublisherAsync;
 use dust_dds::dds_async::subscriber::SubscriberAsync;
 use dust_dds::infrastructure::qos::QosKind;
 use dust_dds::infrastructure::status::{NO_STATUS, StatusKind};
-use dust_dds::infrastructure::time::Duration;
-use dust_dds::runtime::DdsRuntime;
+use dust_dds::infrastructure::time::Duration as DdsDuration;
+use dust_dds::runtime::Timer;
 
-pub struct Module {
+use alloc::string::{String, ToString};
+
+pub struct Module<C: RuntimeContext> {
     name: String,
     pub participant: DomainParticipantAsync,
     pub publisher: PublisherAsync,
@@ -35,9 +36,10 @@ pub struct Module {
     consumer_discovery_writer: DataWriterAsync<ConsumerDiscovery>,
     consumer_discovery_reader: DataReaderAsync<ConsumerDiscovery>,
     objects_storage: ExecutionObjects,
+    context: C,
 }
 
-impl Module {
+impl<C: RuntimeContext> Module<C> {
     pub async fn run_forever(&self) {
         core::future::pending::<()>().await;
     }
@@ -48,6 +50,11 @@ impl Module {
 
     pub fn consumer_discovery_reader(&self) -> &DataReaderAsync<ConsumerDiscovery> {
         &self.consumer_discovery_reader
+    }
+
+    /// Returns the runtime context used by this module.
+    pub fn context(&self) -> &C {
+        &self.context
     }
 
     /// Waits until at least one provider is discovered on the ProviderRegistration topic.
@@ -65,11 +72,12 @@ impl Module {
                 }
             }
 
-            futures_timer::Delay::new(StdDuration::from_millis(10)).await;
+            let mut timer = self.context.timer();
+            timer.delay(Duration::from_millis(10)).await;
         }
 
         self.provider_registration_reader
-            .wait_for_historical_data(Duration::new(5, 0))
+            .wait_for_historical_data(DdsDuration::new(5, 0))
             .await
             .ok();
     }
@@ -89,11 +97,12 @@ impl Module {
                 }
             }
 
-            futures_timer::Delay::new(StdDuration::from_millis(10)).await;
+            let mut timer = self.context.timer();
+            timer.delay(Duration::from_millis(10)).await;
         }
 
         self.consumer_discovery_reader
-            .wait_for_historical_data(Duration::new(5, 0))
+            .wait_for_historical_data(DdsDuration::new(5, 0))
             .await
             .ok();
     }
@@ -104,7 +113,10 @@ impl Module {
     /// be stored for the lifetime of the provider to publish data without reinstantiation.
     ///
     /// For providers without continuous functionalities, this returns `NoContinuousHandle`.
-    pub async fn register_provider<P: ProviderTrait>(&mut self) -> P::ContinuousHandle {
+    pub async fn register_provider<P>(&mut self) -> P::ContinuousHandle
+    where
+        P: ProviderTrait<C>,
+    {
         let functionalities = P::get_functionalities();
 
         self.provider_registration_writer
@@ -119,16 +131,20 @@ impl Module {
                 &self.publisher,
                 &self.subscriber,
                 &mut self.objects_storage,
+                &self.context,
             )
             .await;
         }
 
-        P::create_continuous_handle(&self.participant, &self.publisher).await
+        P::create_continuous_handle(&self.participant, &self.publisher, &self.context).await
     }
 
-    pub async fn register_consumer<C: ConsumerTrait>(&mut self) -> C::Handle {
-        let consumer_id = C::get_consumer_id();
-        let functionalities = C::get_requested_functionalities();
+    pub async fn register_consumer<Consumer>(&mut self) -> Consumer::Handle
+    where
+        Consumer: ConsumerTrait<C>,
+    {
+        let consumer_id = Consumer::get_consumer_id();
+        let functionalities = Consumer::get_requested_functionalities();
 
         for functionality in functionalities {
             self.consumer_discovery_writer
@@ -143,15 +159,22 @@ impl Module {
                 .unwrap();
         }
 
-        C::create_handle(&self.participant, &self.publisher, &self.subscriber).await
+        Consumer::create_handle(
+            &self.participant,
+            &self.publisher,
+            &self.subscriber,
+            &self.context,
+        )
+        .await
     }
 
-    pub async fn new<R: DdsRuntime>(
-        domain_id: u32,
-        name: &str,
-        participant_factory: &'static DomainParticipantFactoryAsync<R>,
-    ) -> Self {
-        let participant = participant_factory
+    /// Creates a module from the supplied runtime context.
+    ///
+    /// The context supplies the participant factory and framework timer, ensuring that both
+    /// are selected consistently for the module's runtime.
+    pub async fn new(domain_id: u32, name: &str, context: C) -> Self {
+        let participant = context
+            .get_dds_factory()
             .create_participant(
                 domain_id as i32,
                 QosKind::Default,
@@ -245,6 +268,7 @@ impl Module {
             consumer_discovery_writer,
             consumer_discovery_reader,
             objects_storage,
+            context,
         }
     }
 }

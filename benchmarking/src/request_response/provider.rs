@@ -3,9 +3,9 @@ mod common;
 
 use std::time::Duration;
 
-use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
 use mycelium_computing::core::module::Module;
 use mycelium_computing::provides;
+use mycelium_computing::runtimes::StdRuntimeContext;
 use smol::Timer;
 
 use crate::common::types::{MathRequest, MathResult};
@@ -25,8 +25,7 @@ impl MathProviderTrait for Math {
 }
 
 async fn run_provider(domain_id: u32) {
-    let factory = DomainParticipantFactoryAsync::get_instance();
-    let mut app = Module::new(domain_id, "BenchmarkProvider", factory).await;
+    let mut app = Module::new(domain_id, "BenchmarkProvider", StdRuntimeContext::new()).await;
     app.register_provider::<Math>().await;
 
     Timer::after(Duration::from_secs(10)).await;

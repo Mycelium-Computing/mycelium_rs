@@ -59,6 +59,25 @@ fn get_functionalities_writers_attributes(
         .collect()
 }
 
+fn get_functionalities_request_locks_attributes(
+    functionalities: &Functionalities,
+) -> Vec<proc_macro2::TokenStream> {
+    functionalities
+        .functionalities
+        .iter()
+        .filter_map(|functionality| match functionality.kind {
+            FunctionalityKind::RequestResponse | FunctionalityKind::Response => {
+                let name = &functionality.name;
+                let lock_ident = format_ident!("{}_request_lock", name.to_string().to_lowercase());
+                Some(quote! {
+                    #lock_ident: mycelium_computing::runtime_context::MutexOf<C, ()>
+                })
+            }
+            FunctionalityKind::Continuous => None,
+        })
+        .collect()
+}
+
 fn generate_continuous_topic(name: &Ident, output_type: &Type) -> proc_macro2::TokenStream {
     let topic_name_str = name.to_string().to_lowercase();
     let topic_var_ident = format_ident!("{}_topic", name.to_string().to_lowercase());
@@ -325,14 +344,31 @@ fn get_functionalities_trait_definitions(
 fn generate_response_wait_logic(
     writer_ident: &Ident,
     reader_ident: &Ident,
+    request_lock_ident: &Ident,
     output_type: &Type,
 ) -> proc_macro2::TokenStream {
     quote! {
+        use dust_dds::runtime::Timer;
+        use mycelium_computing::runtime_context::{RuntimeContext, RuntimeMutex};
+
+        // DataReaderAsync::set_listener replaces the current listener. Keep
+        // one request per functionality in flight so a later call cannot
+        // drop an earlier request's response sender.
+        let _request_guard = self.#request_lock_ident.lock().await;
+
         let match_timeout = core::time::Duration::new(timeout.sec() as u64, timeout.nanosec());
-        if !mycelium_computing::core::qos::wait_for_writer_match(&self.#writer_ident, match_timeout).await {
+        if !mycelium_computing::core::qos::wait_for_writer_match::<C, _>(
+            &self.#writer_ident,
+            match_timeout,
+            self.timer.clone(),
+        ).await {
             return None;
         }
-        if !mycelium_computing::core::qos::wait_for_reader_match(&self.#reader_ident, match_timeout).await {
+        if !mycelium_computing::core::qos::wait_for_reader_match::<C, _>(
+            &self.#reader_ident,
+            match_timeout,
+            self.timer.clone(),
+        ).await {
             return None;
         }
 
@@ -353,20 +389,17 @@ fn generate_response_wait_logic(
             .await
             .unwrap();
 
-        let data_future = async { receiver.await.ok() }.fuse();
+        let data_future = async { receiver.await.ok() };
 
-        let timer_future = mycelium_computing::futures_timer::Delay::new(core::time::Duration::new(
+        let mut timer = self.timer.clone();
+        let timer_future = timer.delay(core::time::Duration::new(
             timeout.sec() as u64,
             timeout.nanosec(),
-        ))
-        .fuse();
+        ));
 
-        mycelium_computing::futures::pin_mut!(data_future);
-        mycelium_computing::futures::pin_mut!(timer_future);
-
-        mycelium_computing::futures::select! {
-            res = data_future => res,
-            _ = timer_future => None,
+        match C::select(data_future, timer_future).await {
+            mycelium_computing::runtime_context::SelectResult::First(res) => res,
+            mycelium_computing::runtime_context::SelectResult::Second(_) => None,
         }
     }
 }
@@ -377,8 +410,10 @@ fn generate_request_response_method(
     output_type: &Type,
     writer_ident: &Ident,
     reader_ident: &Ident,
+    request_lock_ident: &Ident,
 ) -> proc_macro2::TokenStream {
-    let wait_logic = generate_response_wait_logic(writer_ident, reader_ident, output_type);
+    let wait_logic =
+        generate_response_wait_logic(writer_ident, reader_ident, request_lock_ident, output_type);
 
     quote! {
         async fn #name(
@@ -386,11 +421,10 @@ fn generate_request_response_method(
             data: #input_type,
             timeout: dust_dds::infrastructure::time::Duration,
         ) -> Option<#output_type> {
-            use dust_dds::runtime::DdsRuntime;
-            use mycelium_computing::futures::FutureExt;
-
             let request = mycelium_computing::core::messages::ProviderExchange {
-                id: mycelium_computing::utils::next_request_id(),
+                id: mycelium_computing::utils::next_request_id(
+                    self.#reader_ident.get_instance_handle().await,
+                ),
                 payload: data,
             };
 
@@ -404,19 +438,20 @@ fn generate_response_method(
     output_type: &Type,
     writer_ident: &Ident,
     reader_ident: &Ident,
+    request_lock_ident: &Ident,
 ) -> proc_macro2::TokenStream {
-    let wait_logic = generate_response_wait_logic(writer_ident, reader_ident, output_type);
+    let wait_logic =
+        generate_response_wait_logic(writer_ident, reader_ident, request_lock_ident, output_type);
 
     quote! {
         async fn #name(
             &self,
             timeout: dust_dds::infrastructure::time::Duration,
         ) -> Option<#output_type> {
-            use dust_dds::runtime::DdsRuntime;
-            use mycelium_computing::futures::FutureExt;
-
             let request = mycelium_computing::core::messages::ProviderExchange {
-                id: mycelium_computing::utils::next_request_id(),
+                id: mycelium_computing::utils::next_request_id(
+                    self.#reader_ident.get_instance_handle().await,
+                ),
                 payload: mycelium_computing::core::messages::EmptyMessage::default(),
             };
 
@@ -449,6 +484,7 @@ fn get_functionalities_trait_implementations(
         let output_type = &f.output_type;
         let writer_ident = format_ident!("{}_writer", name.to_string().to_lowercase());
         let reader_ident = format_ident!("{}_reader", name.to_string().to_lowercase());
+        let request_lock_ident = format_ident!("{}_request_lock", name.to_string().to_lowercase());
 
         match f.kind {
             FunctionalityKind::RequestResponse => {
@@ -459,17 +495,24 @@ fn get_functionalities_trait_implementations(
                     output_type,
                     &writer_ident,
                     &reader_ident,
+                    &request_lock_ident,
                 )
             }
-            FunctionalityKind::Response => {
-                generate_response_method(name, output_type, &writer_ident, &reader_ident)
-            }
+            FunctionalityKind::Response => generate_response_method(
+                name,
+                output_type,
+                &writer_ident,
+                &reader_ident,
+                &request_lock_ident,
+            ),
             _ => unreachable!(),
         }
     });
 
     vec![quote! {
-        impl #trait_name for #consumer_struct {
+        impl<C: mycelium_computing::runtime_context::RuntimeContext>
+            #trait_name for #consumer_struct<C>
+        {
             #(#methods)*
         }
     }]
@@ -483,16 +526,21 @@ fn get_consumer_struct<'a>(
 
     let data_readers_attributes = get_functionalities_readers_attributes(functionalities);
     let data_writers_attributes = get_functionalities_writers_attributes(functionalities);
+    let request_locks_attributes = get_functionalities_request_locks_attributes(functionalities);
 
-    let all_attributes: Vec<_> = data_readers_attributes
+    let mut all_attributes: Vec<_> = data_readers_attributes
         .into_iter()
         .chain(data_writers_attributes)
+        .chain(request_locks_attributes)
         .collect();
+    all_attributes.push(quote! {
+        timer: mycelium_computing::runtime_context::TimerHandleOf<C>
+    });
 
     (
         consumer_struct.clone(),
         quote::quote! {
-            struct #consumer_struct {
+            struct #consumer_struct<C: mycelium_computing::runtime_context::RuntimeContext> {
                 #(#all_attributes),*
             }
         },
@@ -592,22 +640,29 @@ fn get_init_body_continuous(functionalities: &Functionalities) -> Vec<proc_macro
 
 #[inline(always)]
 fn get_struct_init_fields(functionalities: &Functionalities) -> Vec<proc_macro2::TokenStream> {
-    functionalities
-        .functionalities
-        .iter()
-        .filter_map(|f| match f.kind {
-            FunctionalityKind::RequestResponse | FunctionalityKind::Response => {
-                let name = &f.name;
-                let writer_ident = format_ident!("{}_writer", name.to_string().to_lowercase());
-                let reader_ident = format_ident!("{}_reader", name.to_string().to_lowercase());
-                Some(quote! {
-                    #writer_ident,
-                    #reader_ident
-                })
-            }
-            _ => None,
-        })
-        .collect()
+    let mut fields = vec![quote! { timer: context.timer() }];
+    fields.extend(
+        functionalities
+            .functionalities
+            .iter()
+            .filter_map(|f| match f.kind {
+                FunctionalityKind::RequestResponse | FunctionalityKind::Response => {
+                    let name = &f.name;
+                    let writer_ident = format_ident!("{}_writer", name.to_string().to_lowercase());
+                    let reader_ident = format_ident!("{}_reader", name.to_string().to_lowercase());
+                    let request_lock_ident =
+                        format_ident!("{}_request_lock", name.to_string().to_lowercase());
+                    Some(quote! {
+                        #writer_ident,
+                        #reader_ident,
+                        #request_lock_ident: C::mutex(())
+                    })
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+    );
+    fields
 }
 
 fn get_consumer_trait_impl(
@@ -647,22 +702,31 @@ fn get_consumer_trait_impl(
     let struct_init_fields = get_struct_init_fields(functionalities);
 
     quote! {
-        impl mycelium_computing::core::module::consumer::ConsumerTrait for #struct_name {
-            type Handle = #consumer_struct_name;
+        impl<C: mycelium_computing::runtime_context::RuntimeContext>
+            mycelium_computing::core::module::consumer::ConsumerTrait<C> for #struct_name
+        {
+            type Handle = #consumer_struct_name<C>;
 
-            fn get_consumer_id() -> String {
+            fn get_consumer_id() -> mycelium_computing::alloc::string::String {
+                use mycelium_computing::alloc::string::ToString;
+
                 #struct_name_str.to_string()
             }
 
-            fn get_requested_functionalities() -> Vec<mycelium_computing::core::messages::ProvidedFunctionality> {
-                vec![#(#functionality_definitions),*]
+            fn get_requested_functionalities() -> mycelium_computing::alloc::vec::Vec<mycelium_computing::core::messages::ProvidedFunctionality> {
+                use mycelium_computing::alloc::string::ToString;
+
+                mycelium_computing::alloc::vec![#(#functionality_definitions),*]
             }
 
             async fn create_handle(
                 participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
                 publisher: &dust_dds::dds_async::publisher::PublisherAsync,
                 subscriber: &dust_dds::dds_async::subscriber::SubscriberAsync,
+                context: &C,
             ) -> Self::Handle {
+                use mycelium_computing::runtime_context::RuntimeContext;
+
                 #(#data_topics_instantiations)*
 
                 #(#init_body_writers)*
@@ -691,11 +755,14 @@ fn get_consumer_struct_impl(
 
     quote! {
         impl #struct_name {
-            async fn init(
+            async fn init<C: mycelium_computing::runtime_context::RuntimeContext>(
                 participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
                 subscriber: &dust_dds::dds_async::subscriber::SubscriberAsync,
                 publisher: &dust_dds::dds_async::publisher::PublisherAsync,
-            ) -> #consumer_struct_name {
+                context: &C,
+            ) -> #consumer_struct_name<C> {
+                use mycelium_computing::runtime_context::RuntimeContext;
+
                 #(#data_topics_instantiations)*
 
                 #(#init_body_writers)*

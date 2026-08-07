@@ -35,9 +35,9 @@ struct CalculatorConsumer;
 mod tests {
     use std::time::Duration;
 
-    use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
     use futures::FutureExt;
     use mycelium_computing::core::module::Module;
+    use mycelium_computing::runtimes::StdRuntimeContext;
     use smol::Timer;
 
     use crate::{
@@ -48,8 +48,7 @@ mod tests {
     fn test_function() {
         let handle = std::thread::spawn(|| {
             smol::block_on(async {
-                let factory = DomainParticipantFactoryAsync::get_instance();
-                let mut app = Module::new(150, "test_provider", factory).await;
+                let mut app = Module::new(150, "test_provider", StdRuntimeContext::new()).await;
                 app.register_provider::<CalculatorProvider>().await;
 
                 Timer::after(Duration::new(2, 0)).await;
@@ -59,8 +58,7 @@ mod tests {
         let expected_result = 3.0;
 
         async fn test_consumer() -> f32 {
-            let factory = DomainParticipantFactoryAsync::get_instance();
-            let mut app = Module::new(150, "test_consumer", factory).await;
+            let mut app = Module::new(150, "test_consumer", StdRuntimeContext::new()).await;
 
             let consumer = app.register_consumer::<CalculatorConsumer>().await;
 
@@ -80,7 +78,7 @@ mod tests {
         }
 
         let value = smol::block_on(async {
-            mycelium_computing::futures::select! {
+            futures::select! {
                 res = test_consumer().fuse() => res,
                 _ = Timer::after(Duration::new(1, 0)).fuse() => -1.0,
             }

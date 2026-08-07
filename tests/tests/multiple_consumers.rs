@@ -4,9 +4,9 @@ use std::sync::{
 };
 use std::time::Duration;
 
-use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
 use dust_dds::infrastructure::type_support::DdsType;
 use mycelium_computing::core::module::Module;
+use mycelium_computing::runtimes::StdRuntimeContext;
 use mycelium_computing::{consumes, provides};
 use serial_test::serial;
 use smol::Timer;
@@ -146,8 +146,12 @@ mod tests {
 
         let provider_handle = std::thread::spawn(|| {
             smol::block_on(async {
-                let factory = DomainParticipantFactoryAsync::get_instance();
-                let mut app = Module::new(DOMAIN_CONTINUOUS, "sensor_provider", factory).await;
+                let mut app = Module::new(
+                    DOMAIN_CONTINUOUS,
+                    "sensor_provider",
+                    StdRuntimeContext::new(),
+                )
+                .await;
                 let handle = app.register_provider::<SensorProvider>().await;
 
                 // Wait for consumers to connect
@@ -170,8 +174,12 @@ mod tests {
         let consumer1_handle = std::thread::spawn(|| {
             smol::block_on(async {
                 Timer::after(Duration::from_millis(100)).await;
-                let factory = DomainParticipantFactoryAsync::get_instance();
-                let mut app = Module::new(DOMAIN_CONTINUOUS, "sensor_consumer_1", factory).await;
+                let mut app = Module::new(
+                    DOMAIN_CONTINUOUS,
+                    "sensor_consumer_1",
+                    StdRuntimeContext::new(),
+                )
+                .await;
                 app.register_consumer::<SensorConsumer>().await;
                 Timer::after(Duration::from_secs(6)).await;
             });
@@ -180,8 +188,12 @@ mod tests {
         let consumer2_handle = std::thread::spawn(|| {
             smol::block_on(async {
                 Timer::after(Duration::from_millis(200)).await;
-                let factory = DomainParticipantFactoryAsync::get_instance();
-                let mut app = Module::new(DOMAIN_CONTINUOUS, "sensor_consumer_2", factory).await;
+                let mut app = Module::new(
+                    DOMAIN_CONTINUOUS,
+                    "sensor_consumer_2",
+                    StdRuntimeContext::new(),
+                )
+                .await;
                 app.register_consumer::<SensorConsumer>().await;
                 Timer::after(Duration::from_secs(6)).await;
             });
@@ -190,8 +202,12 @@ mod tests {
         let consumer3_handle = std::thread::spawn(|| {
             smol::block_on(async {
                 Timer::after(Duration::from_millis(300)).await;
-                let factory = DomainParticipantFactoryAsync::get_instance();
-                let mut app = Module::new(DOMAIN_CONTINUOUS, "sensor_consumer_3", factory).await;
+                let mut app = Module::new(
+                    DOMAIN_CONTINUOUS,
+                    "sensor_consumer_3",
+                    StdRuntimeContext::new(),
+                )
+                .await;
                 app.register_consumer::<SensorConsumer>().await;
                 Timer::after(Duration::from_secs(6)).await;
             });
@@ -227,8 +243,7 @@ mod tests {
     async fn test_consumer(name: String, a: i32, b: i32, delay_ms: u64) -> i32 {
         Timer::after(Duration::from_secs(2) + Duration::from_millis(delay_ms)).await;
 
-        let factory = DomainParticipantFactoryAsync::get_instance();
-        let mut app = Module::new(DOMAIN_REQUEST_RESPONSE, &name, factory).await;
+        let mut app = Module::new(DOMAIN_REQUEST_RESPONSE, &name, StdRuntimeContext::new()).await;
 
         let consumer = app.register_consumer::<MathConsumer>().await;
 
@@ -261,8 +276,12 @@ mod tests {
     fn test_request_response_multiple_consumers() {
         let provider_handle = std::thread::spawn(|| {
             smol::block_on(async {
-                let factory = DomainParticipantFactoryAsync::get_instance();
-                let mut app = Module::new(DOMAIN_REQUEST_RESPONSE, "math_provider", factory).await;
+                let mut app = Module::new(
+                    DOMAIN_REQUEST_RESPONSE,
+                    "math_provider",
+                    StdRuntimeContext::new(),
+                )
+                .await;
                 app.register_provider::<MathProvider>().await;
                 Timer::after(Duration::from_secs(20)).await;
             });
@@ -289,8 +308,8 @@ mod tests {
     fn test_response_multiple_consumers() {
         let provider_handle = std::thread::spawn(|| {
             smol::block_on(async {
-                let factory = DomainParticipantFactoryAsync::get_instance();
-                let mut app = Module::new(DOMAIN_RESPONSE, "status_provider", factory).await;
+                let mut app =
+                    Module::new(DOMAIN_RESPONSE, "status_provider", StdRuntimeContext::new()).await;
                 app.register_provider::<StatusProvider>().await;
                 Timer::after(Duration::from_secs(8)).await;
             });
@@ -304,8 +323,12 @@ mod tests {
             smol::block_on(async {
                 Timer::after(Duration::from_secs(1)).await;
 
-                let factory = DomainParticipantFactoryAsync::get_instance();
-                let mut app = Module::new(DOMAIN_RESPONSE, "status_consumer_1", factory).await;
+                let mut app = Module::new(
+                    DOMAIN_RESPONSE,
+                    "status_consumer_1",
+                    StdRuntimeContext::new(),
+                )
+                .await;
                 let consumer = app.register_consumer::<StatusConsumer>().await;
 
                 Timer::after(Duration::from_millis(500)).await;
@@ -327,8 +350,12 @@ mod tests {
             smol::block_on(async {
                 Timer::after(Duration::from_secs(1)).await;
 
-                let factory = DomainParticipantFactoryAsync::get_instance();
-                let mut app = Module::new(DOMAIN_RESPONSE, "status_consumer_2", factory).await;
+                let mut app = Module::new(
+                    DOMAIN_RESPONSE,
+                    "status_consumer_2",
+                    StdRuntimeContext::new(),
+                )
+                .await;
                 let consumer = app.register_consumer::<StatusConsumer>().await;
 
                 Timer::after(Duration::from_millis(600)).await;
@@ -350,8 +377,12 @@ mod tests {
             smol::block_on(async {
                 Timer::after(Duration::from_secs(1)).await;
 
-                let factory = DomainParticipantFactoryAsync::get_instance();
-                let mut app = Module::new(DOMAIN_RESPONSE, "status_consumer_3", factory).await;
+                let mut app = Module::new(
+                    DOMAIN_RESPONSE,
+                    "status_consumer_3",
+                    StdRuntimeContext::new(),
+                )
+                .await;
                 let consumer = app.register_consumer::<StatusConsumer>().await;
 
                 Timer::after(Duration::from_millis(700)).await;
@@ -395,8 +426,12 @@ mod tests {
     fn test_request_response_concurrent_requests() {
         let provider_handle = std::thread::spawn(|| {
             smol::block_on(async {
-                let factory = DomainParticipantFactoryAsync::get_instance();
-                let mut app = Module::new(DOMAIN_CONCURRENT, "concurrent_provider", factory).await;
+                let mut app = Module::new(
+                    DOMAIN_CONCURRENT,
+                    "concurrent_provider",
+                    StdRuntimeContext::new(),
+                )
+                .await;
                 app.register_provider::<MathProvider>().await;
                 Timer::after(Duration::from_secs(12)).await;
             });
@@ -412,11 +447,10 @@ mod tests {
                     Timer::after(Duration::from_secs(1) + Duration::from_millis((i * 200) as u64))
                         .await;
 
-                    let factory = DomainParticipantFactoryAsync::get_instance();
                     let mut app = Module::new(
                         DOMAIN_CONCURRENT,
                         &format!("concurrent_consumer_{}", i),
-                        factory,
+                        StdRuntimeContext::new(),
                     )
                     .await;
                     let consumer = app.register_consumer::<MathConsumer>().await;
@@ -461,8 +495,12 @@ mod tests {
     fn test_request_response_sequential_requests() {
         let provider_handle = std::thread::spawn(|| {
             smol::block_on(async {
-                let factory = DomainParticipantFactoryAsync::get_instance();
-                let mut app = Module::new(DOMAIN_SEQUENTIAL, "sequential_provider", factory).await;
+                let mut app = Module::new(
+                    DOMAIN_SEQUENTIAL,
+                    "sequential_provider",
+                    StdRuntimeContext::new(),
+                )
+                .await;
                 app.register_provider::<MathProvider>().await;
                 Timer::after(Duration::from_secs(15)).await;
             });
@@ -471,8 +509,12 @@ mod tests {
         let results = smol::block_on(async {
             Timer::after(Duration::from_secs(1)).await;
 
-            let factory = DomainParticipantFactoryAsync::get_instance();
-            let mut app = Module::new(DOMAIN_SEQUENTIAL, "sequential_consumer", factory).await;
+            let mut app = Module::new(
+                DOMAIN_SEQUENTIAL,
+                "sequential_consumer",
+                StdRuntimeContext::new(),
+            )
+            .await;
             let consumer = app.register_consumer::<MathConsumer>().await;
 
             Timer::after(Duration::from_millis(500)).await;

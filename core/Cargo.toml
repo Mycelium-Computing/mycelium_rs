@@ -3,9 +3,17 @@ name = "mycelium_computing"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+std_runtime = [
+    "dep:async-lock",
+    "dep:futures",
+    "dust_dds/std",
+    "dust_dds/rtps_udp_transport",
+]
+
 [dependencies]
+async-lock = { version = "3.4.1", default-features = false, optional = true }
 dust_dds = { version = "0.15.0", default-features = false, features = ["dcps", "rtps"] }
-futures = "0.3.31"
-futures-timer = "3.0.3"
-futures-channel = "0.3.31"
+futures = { version = "0.3.31", default-features = false, features = ["alloc"], optional = true }
 mycelium_computing_macros = { path = "../macros" }

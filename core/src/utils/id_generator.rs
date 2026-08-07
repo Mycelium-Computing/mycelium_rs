@@ -1,7 +1,13 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
-/// A thread-safe atomic ID generator that produces unique sequential IDs.
-/// Uses `core::sync::atomic::AtomicU32` to ensure thread safety without external dependencies.
+use crate::core::messages::RequestId;
+use dust_dds::infrastructure::instance::InstanceHandle;
+
+/// A thread-safe atomic sequence generator.
+///
+/// The sequence is unique within a process.  A sequence alone must not be
+/// used to correlate a distributed request; use [`next_request_id`] so the
+/// sequence is scoped by the requester's DDS identity.
 pub struct AtomicIdGenerator {
     counter: AtomicU32,
 }
@@ -21,9 +27,10 @@ impl AtomicIdGenerator {
         }
     }
 
-    /// Generates the next unique ID.
-    /// This method is thread-safe and will always return a unique value
-    /// across all threads (until overflow).
+    /// Generates the next sequence value.
+    ///
+    /// This method is thread-safe and unique across all threads using this
+    /// generator until overflow. It is not globally unique across processes.
     pub fn next_id(&self) -> u32 {
         self.counter.fetch_add(1, Ordering::Relaxed)
     }
@@ -45,14 +52,17 @@ impl Default for AtomicIdGenerator {
     }
 }
 
-/// Global static ID generator for request IDs.
-/// This provides a single source of unique IDs across the entire application.
+/// Process-local sequence generator used as one component of a request ID.
 static GLOBAL_REQUEST_ID_GENERATOR: AtomicIdGenerator = AtomicIdGenerator::new();
 
-/// Generates the next unique request ID using the global generator.
-/// This is the recommended way to generate request IDs for `ProviderExchange` messages.
-pub fn next_request_id() -> u32 {
-    GLOBAL_REQUEST_ID_GENERATOR.next_id()
+/// Generates a request ID scoped by the requester's DDS reader identity.
+///
+/// DDS reader handles include the participant GUID and are therefore unique
+/// across processes. Combining that identity with a process-local sequence
+/// prevents two consumers that both issue their first request from sharing a
+/// correlation ID.
+pub fn next_request_id(requester: InstanceHandle) -> RequestId {
+    RequestId::new(requester.into(), GLOBAL_REQUEST_ID_GENERATOR.next_id())
 }
 
 #[cfg(test)]
@@ -89,5 +99,23 @@ mod tests {
         generator.next_id();
         generator.reset();
         assert_eq!(generator.current(), 0);
+    }
+
+    #[test]
+    fn request_ids_are_scoped_by_requester() {
+        let first = RequestId::new([1; 16], 0);
+        let second = RequestId::new([2; 16], 0);
+
+        assert_ne!(first, second);
+        assert_eq!(first.sequence, second.sequence);
+        assert_ne!(first.requester_id, second.requester_id);
+    }
+
+    #[test]
+    fn next_request_id_preserves_reader_identity() {
+        let requester = InstanceHandle::new([7; 16]);
+        let request_id = next_request_id(requester);
+
+        assert_eq!(request_id.requester_id, [7; 16]);
     }
 }

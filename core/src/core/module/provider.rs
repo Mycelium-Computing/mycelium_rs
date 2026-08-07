@@ -1,22 +1,19 @@
 extern crate alloc;
 
 use crate::core::messages::ProviderMessage;
+use crate::runtime_context::RuntimeContext;
 use crate::utils::storage::ExecutionObjects;
 use alloc::string::String;
 use dust_dds::dds_async::domain_participant::DomainParticipantAsync;
 use dust_dds::dds_async::publisher::PublisherAsync;
 use dust_dds::dds_async::subscriber::SubscriberAsync;
-use dust_dds::runtime::DdsRuntime;
 
 /// A marker type for providers that don't have continuous functionalities.
 /// This type is used as the default `ContinuousHandle` when no continuous
 /// methods are defined.
 pub struct NoContinuousHandle;
 
-pub trait ProviderTrait {
-    /// Runtime selected by the `provides` macro.
-    type Runtime: DdsRuntime;
-
+pub trait ProviderTrait<C: RuntimeContext> {
     /// The handle type that provides access to continuous functionality writers.
     /// For providers without continuous functionalities, this should be `NoContinuousHandle`.
     type ContinuousHandle;
@@ -29,6 +26,7 @@ pub trait ProviderTrait {
         publisher: &PublisherAsync,
         subscriber: &SubscriberAsync,
         storage: &mut ExecutionObjects,
+        context: &C,
     ) -> impl Future<Output = ()>;
 
     /// Creates the continuous handle containing writers for all continuous functionalities.
@@ -39,5 +37,6 @@ pub trait ProviderTrait {
     fn create_continuous_handle(
         participant: &DomainParticipantAsync,
         publisher: &PublisherAsync,
+        context: &C,
     ) -> impl Future<Output = Self::ContinuousHandle>;
 }

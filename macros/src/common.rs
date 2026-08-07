@@ -71,15 +71,11 @@ impl Parse for Functionality {
 }
 
 pub struct Functionalities {
-    pub runtime: Type,
     pub functionalities: Vec<Functionality>,
 }
 
 impl Parse for Functionalities {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let runtime: Type = input.parse()?;
-        input.parse::<Token![,]>()?;
-
         // Parse the bracketed list of functionalities
         let content;
         syn::bracketed!(content in input);
@@ -89,9 +85,6 @@ impl Parse for Functionalities {
 
         let functionalities = functionalities_parsed.into_iter().collect();
 
-        Ok(Functionalities {
-            runtime,
-            functionalities,
-        })
+        Ok(Functionalities { functionalities })
     }
 }

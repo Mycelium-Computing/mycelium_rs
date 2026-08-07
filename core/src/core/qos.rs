@@ -1,3 +1,4 @@
+use crate::runtime_context::{RuntimeContext, SelectResult, TimerHandleOf};
 use core::time::Duration;
 use dust_dds::dds_async::data_reader::DataReaderAsync;
 use dust_dds::dds_async::data_writer::DataWriterAsync;
@@ -9,7 +10,6 @@ use dust_dds::infrastructure::qos_policy::{
 use dust_dds::infrastructure::time::DurationKind;
 use dust_dds::infrastructure::type_support::TypeSupport;
 use dust_dds::runtime::Timer;
-use futures::future::select;
 
 pub fn reliable_writer_qos() -> DataWriterQos {
     DataWriterQos {
@@ -43,15 +43,17 @@ pub fn reliable_reader_qos() -> DataReaderQos {
     }
 }
 
-pub async fn wait_for_writer_match<T, TimerHandle>(
+pub async fn wait_for_writer_match<C, T>(
     writer: &DataWriterAsync<T>,
     timeout: Duration,
-    timer: TimerHandle,
+    timer: TimerHandleOf<C>,
 ) -> bool
 where
-    T: TypeSupport,
-    TimerHandle: Timer + Clone + Send + Sync + 'static,
+    C: RuntimeContext,
+    T: TypeSupport + Send + Sync,
+    TimerHandleOf<C>: Timer + Clone + Send + Sync + 'static,
 {
+    let writer = writer.clone();
     let mut match_timer = timer.clone();
     let match_check = async move {
         loop {
@@ -70,23 +72,23 @@ where
     let mut timeout_timer = timer;
     let timeout_future = timeout_timer.delay(timeout);
 
-    futures::pin_mut!(match_check, timeout_future);
-
-    match select(match_check, timeout_future).await {
-        futures::future::Either::Left((result, _)) => result,
-        futures::future::Either::Right(_) => false,
+    match C::select(match_check, timeout_future).await {
+        SelectResult::First(result) => result,
+        SelectResult::Second(_) => false,
     }
 }
 
-pub async fn wait_for_reader_match<T, TimerHandle>(
+pub async fn wait_for_reader_match<C, T>(
     reader: &DataReaderAsync<T>,
     timeout: Duration,
-    timer: TimerHandle,
+    timer: TimerHandleOf<C>,
 ) -> bool
 where
-    T: TypeSupport,
-    TimerHandle: Timer + Clone + Send + Sync + 'static,
+    C: RuntimeContext,
+    T: TypeSupport + Send + Sync,
+    TimerHandleOf<C>: Timer + Clone + Send + Sync + 'static,
 {
+    let reader = reader.clone();
     let mut match_timer = timer.clone();
     let match_check = async move {
         loop {
@@ -105,10 +107,8 @@ where
     let mut timeout_timer = timer;
     let timeout_future = timeout_timer.delay(timeout);
 
-    futures::pin_mut!(match_check, timeout_future);
-
-    match select(match_check, timeout_future).await {
-        futures::future::Either::Left((result, _)) => result,
-        futures::future::Either::Right(_) => false,
+    match C::select(match_check, timeout_future).await {
+        SelectResult::First(result) => result,
+        SelectResult::Second(_) => false,
     }
 }

@@ -1,13 +1,7 @@
 #![forbid(unsafe_code)]
-#![cfg_attr(not(feature = "std_runtime"), no_std)]
+#![no_std]
 
-pub mod futures {
-    pub use futures::*;
-}
-
-pub mod async_lock {
-    pub use ::async_lock::*;
-}
+pub extern crate alloc;
 
 pub mod core;
 pub mod runtime_context;

@@ -70,7 +70,7 @@ fn get_functionalities_request_locks_attributes(
                 let name = &functionality.name;
                 let lock_ident = format_ident!("{}_request_lock", name.to_string().to_lowercase());
                 Some(quote! {
-                    #lock_ident: mycelium_computing::async_lock::Mutex<()>
+                    #lock_ident: mycelium_computing::runtime_context::MutexOf<C, ()>
                 })
             }
             FunctionalityKind::Continuous => None,
@@ -349,6 +349,7 @@ fn generate_response_wait_logic(
 ) -> proc_macro2::TokenStream {
     quote! {
         use dust_dds::runtime::Timer;
+        use mycelium_computing::runtime_context::{RuntimeContext, RuntimeMutex};
 
         // DataReaderAsync::set_listener replaces the current listener. Keep
         // one request per functionality in flight so a later call cannot
@@ -356,14 +357,14 @@ fn generate_response_wait_logic(
         let _request_guard = self.#request_lock_ident.lock().await;
 
         let match_timeout = core::time::Duration::new(timeout.sec() as u64, timeout.nanosec());
-        if !mycelium_computing::core::qos::wait_for_writer_match(
+        if !mycelium_computing::core::qos::wait_for_writer_match::<C, _>(
             &self.#writer_ident,
             match_timeout,
             self.timer.clone(),
         ).await {
             return None;
         }
-        if !mycelium_computing::core::qos::wait_for_reader_match(
+        if !mycelium_computing::core::qos::wait_for_reader_match::<C, _>(
             &self.#reader_ident,
             match_timeout,
             self.timer.clone(),
@@ -396,11 +397,9 @@ fn generate_response_wait_logic(
             timeout.nanosec(),
         ));
 
-        mycelium_computing::futures::pin_mut!(data_future, timer_future);
-
-        match mycelium_computing::futures::future::select(data_future, timer_future).await {
-            mycelium_computing::futures::future::Either::Left((res, _)) => res,
-            mycelium_computing::futures::future::Either::Right(_) => None,
+        match C::select(data_future, timer_future).await {
+            mycelium_computing::runtime_context::SelectResult::First(res) => res,
+            mycelium_computing::runtime_context::SelectResult::Second(_) => None,
         }
     }
 }
@@ -511,7 +510,9 @@ fn get_functionalities_trait_implementations(
     });
 
     vec![quote! {
-        impl #trait_name for #consumer_struct {
+        impl<C: mycelium_computing::runtime_context::RuntimeContext>
+            #trait_name for #consumer_struct<C>
+        {
             #(#methods)*
         }
     }]
@@ -526,7 +527,6 @@ fn get_consumer_struct<'a>(
     let data_readers_attributes = get_functionalities_readers_attributes(functionalities);
     let data_writers_attributes = get_functionalities_writers_attributes(functionalities);
     let request_locks_attributes = get_functionalities_request_locks_attributes(functionalities);
-    let runtime = &functionalities.runtime;
 
     let mut all_attributes: Vec<_> = data_readers_attributes
         .into_iter()
@@ -534,13 +534,13 @@ fn get_consumer_struct<'a>(
         .chain(request_locks_attributes)
         .collect();
     all_attributes.push(quote! {
-        timer: <#runtime as dust_dds::runtime::DdsRuntime>::TimerHandle
+        timer: mycelium_computing::runtime_context::TimerHandleOf<C>
     });
 
     (
         consumer_struct.clone(),
         quote::quote! {
-            struct #consumer_struct {
+            struct #consumer_struct<C: mycelium_computing::runtime_context::RuntimeContext> {
                 #(#all_attributes),*
             }
         },
@@ -640,7 +640,7 @@ fn get_init_body_continuous(functionalities: &Functionalities) -> Vec<proc_macro
 
 #[inline(always)]
 fn get_struct_init_fields(functionalities: &Functionalities) -> Vec<proc_macro2::TokenStream> {
-    let mut fields = vec![quote! { timer }];
+    let mut fields = vec![quote! { timer: context.timer() }];
     fields.extend(
         functionalities
             .functionalities
@@ -655,7 +655,7 @@ fn get_struct_init_fields(functionalities: &Functionalities) -> Vec<proc_macro2:
                     Some(quote! {
                         #writer_ident,
                         #reader_ident,
-                        #request_lock_ident: mycelium_computing::async_lock::Mutex::new(())
+                        #request_lock_ident: C::mutex(())
                     })
                 }
                 _ => None,
@@ -671,7 +671,6 @@ fn get_consumer_trait_impl(
     consumer_struct_name: &Ident,
 ) -> proc_macro2::TokenStream {
     let struct_name_str = struct_name.to_string();
-    let runtime = &functionalities.runtime;
 
     let functionality_definitions: Vec<_> = functionalities
         .functionalities
@@ -703,24 +702,31 @@ fn get_consumer_trait_impl(
     let struct_init_fields = get_struct_init_fields(functionalities);
 
     quote! {
-        impl mycelium_computing::core::module::consumer::ConsumerTrait for #struct_name {
-            type Runtime = #runtime;
-            type Handle = #consumer_struct_name;
+        impl<C: mycelium_computing::runtime_context::RuntimeContext>
+            mycelium_computing::core::module::consumer::ConsumerTrait<C> for #struct_name
+        {
+            type Handle = #consumer_struct_name<C>;
 
-            fn get_consumer_id() -> String {
+            fn get_consumer_id() -> mycelium_computing::alloc::string::String {
+                use mycelium_computing::alloc::string::ToString;
+
                 #struct_name_str.to_string()
             }
 
-            fn get_requested_functionalities() -> Vec<mycelium_computing::core::messages::ProvidedFunctionality> {
-                vec![#(#functionality_definitions),*]
+            fn get_requested_functionalities() -> mycelium_computing::alloc::vec::Vec<mycelium_computing::core::messages::ProvidedFunctionality> {
+                use mycelium_computing::alloc::string::ToString;
+
+                mycelium_computing::alloc::vec![#(#functionality_definitions),*]
             }
 
             async fn create_handle(
                 participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
                 publisher: &dust_dds::dds_async::publisher::PublisherAsync,
                 subscriber: &dust_dds::dds_async::subscriber::SubscriberAsync,
-                timer: <#runtime as dust_dds::runtime::DdsRuntime>::TimerHandle,
+                context: &C,
             ) -> Self::Handle {
+                use mycelium_computing::runtime_context::RuntimeContext;
+
                 #(#data_topics_instantiations)*
 
                 #(#init_body_writers)*
@@ -741,7 +747,6 @@ fn get_consumer_struct_impl(
     functionalities: &Functionalities,
     consumer_struct_name: &Ident,
 ) -> proc_macro2::TokenStream {
-    let runtime = &functionalities.runtime;
     let data_topics_instantiations = get_functionalities_topics_instantiations(functionalities);
     let init_body_writers = get_init_body_writers(functionalities);
     let init_body_readers = get_init_body_readers(functionalities);
@@ -750,12 +755,14 @@ fn get_consumer_struct_impl(
 
     quote! {
         impl #struct_name {
-            async fn init(
+            async fn init<C: mycelium_computing::runtime_context::RuntimeContext>(
                 participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
                 subscriber: &dust_dds::dds_async::subscriber::SubscriberAsync,
                 publisher: &dust_dds::dds_async::publisher::PublisherAsync,
-                timer: <#runtime as dust_dds::runtime::DdsRuntime>::TimerHandle,
-            ) -> #consumer_struct_name {
+                context: &C,
+            ) -> #consumer_struct_name<C> {
+                use mycelium_computing::runtime_context::RuntimeContext;
+
                 #(#data_topics_instantiations)*
 
                 #(#init_body_writers)*

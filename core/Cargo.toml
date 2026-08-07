@@ -5,10 +5,15 @@ edition = "2024"
 
 [features]
 default = []
-std_runtime = ["dust_dds/std", "dust_dds/rtps_udp_transport"]
+std_runtime = [
+    "dep:async-lock",
+    "dep:futures",
+    "dust_dds/std",
+    "dust_dds/rtps_udp_transport",
+]
 
 [dependencies]
-async-lock = { version = "3.4.1", default-features = false }
+async-lock = { version = "3.4.1", default-features = false, optional = true }
 dust_dds = { version = "0.15.0", default-features = false, features = ["dcps", "rtps"] }
-futures = { version = "0.3.31", default-features = false, features = ["alloc"] }
+futures = { version = "0.3.31", default-features = false, features = ["alloc"], optional = true }
 mycelium_computing_macros = { path = "../macros" }

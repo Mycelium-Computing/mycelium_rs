@@ -68,13 +68,18 @@ pub trait RuntimeContext: Send + Sync + 'static {
     fn timer(&self) -> TimerHandleOf<Self>;
 
     /// Construct a mutex containing `value`.
-    fn mutex<T>(&self, value: T) -> MutexOf<Self, T>
+    ///
+    /// This is an associated function because mutex construction does not require access to
+    /// state owned by a context instance.
+    fn mutex<T>(value: T) -> MutexOf<Self, T>
     where
         T: Send + 'static;
 
     /// Race two futures using this context's selection policy.
+    ///
+    /// This is an associated function because future selection does not require access to state
+    /// owned by a context instance.
     fn select<A, B>(
-        &self,
         first: A,
         second: B,
     ) -> impl Future<Output = SelectResult<A::Output, B::Output>> + Send

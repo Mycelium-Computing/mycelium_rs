@@ -80,7 +80,7 @@ impl RuntimeContext for StdRuntimeContext {
         self.timer_driver.handle()
     }
 
-    fn mutex<T>(&self, value: T) -> MutexOf<Self, T>
+    fn mutex<T>(value: T) -> MutexOf<Self, T>
     where
         T: Send + 'static,
     {
@@ -88,7 +88,6 @@ impl RuntimeContext for StdRuntimeContext {
     }
 
     fn select<A, B>(
-        &self,
         first: A,
         second: B,
     ) -> impl Future<Output = SelectResult<A::Output, B::Output>> + Send

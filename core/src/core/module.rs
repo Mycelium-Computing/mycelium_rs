@@ -52,6 +52,11 @@ impl<C: RuntimeContext> Module<C> {
         &self.consumer_discovery_reader
     }
 
+    /// Returns the runtime context used by this module.
+    pub fn context(&self) -> &C {
+        &self.context
+    }
+
     /// Waits until at least one provider is discovered on the ProviderRegistration topic.
     /// This ensures the SEDP handshake has completed and data can flow.
     pub async fn wait_for_providers(&self) {
@@ -110,7 +115,7 @@ impl<C: RuntimeContext> Module<C> {
     /// For providers without continuous functionalities, this returns `NoContinuousHandle`.
     pub async fn register_provider<P>(&mut self) -> P::ContinuousHandle
     where
-        P: ProviderTrait<Runtime = C::DdsRuntime>,
+        P: ProviderTrait<C>,
     {
         let functionalities = P::get_functionalities();
 
@@ -126,16 +131,17 @@ impl<C: RuntimeContext> Module<C> {
                 &self.publisher,
                 &self.subscriber,
                 &mut self.objects_storage,
+                &self.context,
             )
             .await;
         }
 
-        P::create_continuous_handle(&self.participant, &self.publisher).await
+        P::create_continuous_handle(&self.participant, &self.publisher, &self.context).await
     }
 
     pub async fn register_consumer<Consumer>(&mut self) -> Consumer::Handle
     where
-        Consumer: ConsumerTrait<Runtime = C::DdsRuntime>,
+        Consumer: ConsumerTrait<C>,
     {
         let consumer_id = Consumer::get_consumer_id();
         let functionalities = Consumer::get_requested_functionalities();
@@ -157,7 +163,7 @@ impl<C: RuntimeContext> Module<C> {
             &self.participant,
             &self.publisher,
             &self.subscriber,
-            self.context.timer(),
+            &self.context,
         )
         .await
     }

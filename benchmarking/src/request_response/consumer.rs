@@ -8,7 +8,7 @@ use crate::common::types::{MathRequest, MathResult};
 #[path = "../common/mod.rs"]
 mod common;
 
-#[consumes(dust_dds::std_runtime::StdRuntime, [
+#[consumes([
     RequestResponse("sum_two_numbers", MathRequest, MathResult)
 ])]
 struct Math;

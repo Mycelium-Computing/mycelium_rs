@@ -41,8 +41,8 @@ Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mycelium_computing = { path = "path/to/core" }
-dust_dds =  { git = "https://github.com/s2e-systems/dust-dds.git", branch = "main", default-features = false, features = ["dcps"] }
+mycelium_computing = { path = "path/to/core", features = ["std_runtime"] }
+dust_dds = { version = "0.15.0", default-features = false, features = ["dcps", "rtps"] }
 ```
 
 ## Quick Start
@@ -72,9 +72,8 @@ Use the `#[provides]` macro to define a service provider:
 
 ```rust
 use mycelium_computing::provides;
-use dust_dds::std_runtime::StdRuntime;
 
-#[provides(StdRuntime, [
+#[provides([
     RequestResponse("add_two_ints", ArithmeticRequest, Number),
     Continuous("stream_data", SensorData)
 ])]
@@ -96,9 +95,8 @@ Use the `#[consumes]` macro to define a service consumer:
 
 ```rust
 use mycelium_computing::consumes;
-use dust_dds::std_runtime::StdRuntime;
 
-#[consumes(StdRuntime, [
+#[consumes([
     RequestResponse("add_two_ints", ArithmeticRequest, Number),
     Continuous("stream_data", SensorData)
 ])]
@@ -112,23 +110,22 @@ impl CalculatorConsumerContinuosTrait for CalculatorConsumer {
 }
 ```
 
+The runtime is selected when a module is created, not in the provider or consumer declaration.
+For the standard runtime, construct the module with `StdRuntimeContext::new()`.
+
 ### Running Provider and Consumer
 
 **Provider Module:**
 
 ```rust
-use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
-use dust_dds::std_runtime::timer::TimerDriver;
 use mycelium_computing::core::module::Module;
+use mycelium_computing::runtimes::StdRuntimeContext;
 
 async fn run_provider() {
-    let factory = DomainParticipantFactoryAsync::get_instance();
-    let timer_driver = TimerDriver::new();
     let mut app = Module::new(
         0,
         "CalculatorService",
-        factory,
-        timer_driver.handle(),
+        StdRuntimeContext::new(),
     )
     .await;
     
@@ -146,18 +143,14 @@ async fn run_provider() {
 **Consumer Module:**
 
 ```rust
-use dust_dds::dds_async::domain_participant_factory::DomainParticipantFactoryAsync;
-use dust_dds::std_runtime::timer::TimerDriver;
 use mycelium_computing::core::module::Module;
+use mycelium_computing::runtimes::StdRuntimeContext;
 
 async fn run_consumer() {
-    let factory = DomainParticipantFactoryAsync::get_instance();
-    let timer_driver = TimerDriver::new();
     let mut app = Module::new(
         0,
         "CalculatorService",
-        factory,
-        timer_driver.handle(),
+        StdRuntimeContext::new(),
     )
     .await;
 
@@ -185,7 +178,7 @@ async fn run_consumer() {
 A bidirectional pattern where the consumer sends a request and waits for a response:
 
 ```rust
-#[provides(StdRuntime, [
+#[provides([
     RequestResponse("service_name", RequestType, ResponseType)
 ])]
 ```
@@ -195,7 +188,7 @@ A bidirectional pattern where the consumer sends a request and waits for a respo
 A pattern where the provider returns data without requiring input:
 
 ```rust
-#[provides(StdRuntime, [
+#[provides([
     Response("get_status", StatusResponse)
 ])]
 ```
@@ -205,7 +198,7 @@ A pattern where the provider returns data without requiring input:
 A pub-sub pattern for streaming data from provider to consumers:
 
 ```rust
-#[provides(StdRuntime, [
+#[provides([
     Continuous("telemetry", TelemetryData)
 ])]
 ```
@@ -249,8 +242,7 @@ cargo run --bin continuous_consumer
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| dust_dds | 0.13.0 | DDS middleware implementation |
-| futures | 0.3.31 | Async utilities |
+| dust_dds | 0.15.0 | DDS middleware and runtime integration |
 | proc-macro2 | 1.0.103 | Procedural macro support |
 | quote | 1.0.41 | Code generation |
 | syn | 2.0.108 | Rust syntax parsing |

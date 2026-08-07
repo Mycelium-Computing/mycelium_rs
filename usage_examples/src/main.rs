@@ -6,7 +6,7 @@ use mycelium_computing::runtimes::StdRuntimeContext;
 use mycelium_computing::{consumes, provides};
 use std::env;
 
-#[provides(dust_dds::std_runtime::StdRuntime, [
+#[provides([
     RequestResponse("face_recognition", FaceRecognitionRequest, FaceRecognitionResponse),
     Response("available_models", ModelsInfo),
     Continuous("person_in_frame", PersonFrameData),
@@ -29,7 +29,7 @@ impl FaceRecognitionProviderTrait for FaceRecognition {
     }
 }
 
-#[consumes(dust_dds::std_runtime::StdRuntime, [
+#[consumes([
     RequestResponse("face_recognition", FaceRecognitionRequest, FaceRecognitionResponse),
     Response("happy_face_recognition", FaceRecognitionResponse),
     Continuous("person_in_frame", PersonFrameData)

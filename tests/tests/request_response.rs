@@ -12,7 +12,7 @@ struct Number {
     value: f32,
 }
 
-#[provides(dust_dds::std_runtime::StdRuntime, [
+#[provides([
     RequestResponse("add_two_ints", ArithmeticRequest, Number)
 ])]
 struct CalculatorProvider;
@@ -26,7 +26,7 @@ impl CalculatorProviderProviderTrait for CalculatorProvider {
     }
 }
 
-#[consumes(dust_dds::std_runtime::StdRuntime, [
+#[consumes([
     RequestResponse("add_two_ints", ArithmeticRequest, Number),
 ])]
 struct CalculatorConsumer;
@@ -78,7 +78,7 @@ mod tests {
         }
 
         let value = smol::block_on(async {
-            mycelium_computing::futures::select! {
+            futures::select! {
                 res = test_consumer().fuse() => res,
                 _ = Timer::after(Duration::new(1, 0)).fuse() => -1.0,
             }

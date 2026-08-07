@@ -42,7 +42,7 @@ pub struct StatusInfo {
 // CONTINUOUS PROVIDER
 // =============================================================================
 
-#[provides(dust_dds::std_runtime::StdRuntime, [
+#[provides([
     Continuous("sensor_stream", SensorData)
 ])]
 struct SensorProvider;
@@ -54,7 +54,7 @@ struct SensorProvider;
 static CONTINUOUS_RECEIVED_COUNT: AtomicI32 = AtomicI32::new(0);
 static CONTINUOUS_TOTAL_VALUE: AtomicI32 = AtomicI32::new(0);
 
-#[consumes(dust_dds::std_runtime::StdRuntime, [
+#[consumes([
     Continuous("sensor_stream", SensorData)
 ])]
 struct SensorConsumer;
@@ -70,7 +70,7 @@ impl SensorConsumerContinuosTrait for SensorConsumer {
 // REQUEST-RESPONSE PROVIDER
 // =============================================================================
 
-#[provides(dust_dds::std_runtime::StdRuntime, [
+#[provides([
     RequestResponse("multiply", MathRequest, MathResponse)
 ])]
 struct MathProvider;
@@ -83,7 +83,7 @@ impl MathProviderProviderTrait for MathProvider {
     }
 }
 
-#[consumes(dust_dds::std_runtime::StdRuntime, [
+#[consumes([
     RequestResponse("multiply", MathRequest, MathResponse)
 ])]
 struct MathConsumer;
@@ -92,7 +92,7 @@ struct MathConsumer;
 // RESPONSE PROVIDER (no request input)
 // =============================================================================
 
-#[provides(dust_dds::std_runtime::StdRuntime, [
+#[provides([
     Response("get_status", StatusInfo)
 ])]
 struct StatusProvider;
@@ -106,7 +106,7 @@ impl StatusProviderProviderTrait for StatusProvider {
     }
 }
 
-#[consumes(dust_dds::std_runtime::StdRuntime, [
+#[consumes([
     Response("get_status", StatusInfo)
 ])]
 struct StatusConsumer;

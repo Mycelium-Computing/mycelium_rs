@@ -8,12 +8,12 @@ struct Number {
     value: i32,
 }
 
-#[provides(dust_dds::std_runtime::StdRuntime, [
+#[provides([
     Continuous("integer", Number)
 ])]
 struct NumberGenerator;
 
-#[consumes(dust_dds::std_runtime::StdRuntime, [
+#[consumes([
     Continuous("integer", Number)
 ])]
 struct NumberReceiver;

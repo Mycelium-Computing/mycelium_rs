@@ -11,7 +11,7 @@ use smol::Timer;
 use crate::common::types::{MathRequest, MathResult};
 
 /// Provider implementation for benchmarking
-#[provides(dust_dds::std_runtime::StdRuntime, [
+#[provides([
     RequestResponse("sum_two_numbers", MathRequest, MathResult)
 ])]
 struct Math;

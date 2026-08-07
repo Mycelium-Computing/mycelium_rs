@@ -13,3 +13,12 @@ pub struct IMUData {
     accelerometer: Vector3,
     gyroscope: Vector3,
 }
+
+impl IMUData {
+    pub fn new(accelerometer: Vector3, gyroscope: Vector3) -> Self {
+        Self {
+            accelerometer,
+            gyroscope,
+        }
+    }
+}

@@ -24,15 +24,18 @@ impl From<TermuxVector> for Vector3 {
 
 #[derive(Deserialize)]
 struct TermuxImuSample {
-    #[serde(rename = "icm456xy_acc")]
-    accelerometer: TermuxVector,
-    #[serde(rename = "icm456xy_gyro")]
-    gyroscope: TermuxVector,
+    #[serde(rename = "icm456xy_acc", default)]
+    accelerometer: Option<TermuxVector>,
+    #[serde(rename = "icm456xy_gyro", default)]
+    gyroscope: Option<TermuxVector>,
 }
 
-impl From<TermuxImuSample> for IMUData {
-    fn from(sample: TermuxImuSample) -> Self {
-        Self::new(sample.accelerometer.into(), sample.gyroscope.into())
+impl TermuxImuSample {
+    fn into_imu_data(self) -> Option<IMUData> {
+        Some(IMUData::new(
+            self.accelerometer?.into(),
+            self.gyroscope?.into(),
+        ))
     }
 }
 
@@ -49,7 +52,7 @@ async fn provider() -> Result<(), Box<dyn std::error::Error>> {
     let sensor_handle = app.register_provider::<SmartphoneSensor>().await;
 
     let mut sensor_process = Command::new("termux-sensor")
-        .args(["-s", "icm456xy_acc,icm456xy_gyro,mmc5603", "-d", &delay_ms]) // Include the sensors of your interest
+        .args(["-s", "icm456xy_acc,icm456xy_gyro", "-d", &delay_ms])
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()?;
@@ -66,7 +69,9 @@ async fn provider() -> Result<(), Box<dyn std::error::Error>> {
     for sample in stream {
         match sample {
             Ok(sample) => {
-                sensor_handle.imu(sample.into()).await;
+                if let Some(data) = sample.into_imu_data() {
+                    sensor_handle.imu(data).await;
+                }
             }
             Err(error) => {
                 eprintln!("JSON parse error: {error}");

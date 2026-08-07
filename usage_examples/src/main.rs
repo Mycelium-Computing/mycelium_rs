@@ -1,76 +1,83 @@
+// RUN THIS ON AN ANDROID DEVICE USING TERMUX
 mod example_messages;
 
-use crate::example_messages::face_recognition::*;
+use example_messages::imu_sensor::IMUData;
 use mycelium_computing::core::module::Module;
 use mycelium_computing::runtimes::StdRuntimeContext;
 use mycelium_computing::{consumes, provides};
+use serde_json::Value;
 use std::env;
+use std::io::BufReader;
+use std::process::{Command, Stdio};
 
 #[provides([
-    RequestResponse("face_recognition", FaceRecognitionRequest, FaceRecognitionResponse),
-    Response("available_models", ModelsInfo),
-    Continuous("person_in_frame", PersonFrameData),
+    Continuous("imu", IMUData),
 ])]
-struct FaceRecognition;
+struct SmartphoneSensor;
 
-// Callbacks implementing the provider functionality
-impl FaceRecognitionProviderTrait for FaceRecognition {
-    async fn face_recognition(_input: FaceRecognitionRequest) -> FaceRecognitionResponse {
-        println!("Responding");
-        FaceRecognitionResponse {
-            model: "dummy".to_string(),
-            applied: true,
-            final_status: true,
+async fn provider() {
+    let delay_ms = env::args().nth(1).unwrap_or_else(|| "10".to_string());
+
+    let mut app = Module::new(0, "SmartphoneSensor", StdRuntimeContext::new()).await;
+
+    let sensor_handle = app.register_provider::<SmartphoneSensor>().await;
+
+    let mut sensor_process = Command::new("termux-sensor")
+        .args(["-s", "icm456xy_acc,icm456xy_gyro,mmc5603", "-d", &delay_ms]) // Include the sensors of your interest
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .unwrap();
+
+    let stdout = sensor_process
+        .stdout
+        .take()
+        .ok_or("failed to capture termux-sensor stdout")
+        .unwrap();
+
+    let reader = BufReader::new(stdout);
+
+    let stream = serde_json::Deserializer::from_reader(reader).into_iter::<Value>();
+
+    for sample in stream {
+        match sample {
+            Ok(json) => {
+                sensor_handle
+                    .imu(serde_json::from_value(json).unwrap())
+                    .await;
+            }
+            Err(error) => {
+                eprintln!("JSON parse error: {error}");
+            }
         }
     }
 
-    async fn available_models() -> ModelsInfo {
-        ModelsInfo { models: vec![] }
+    let status = sensor_process.wait().unwrap();
+
+    if !status.success() {
+        eprintln!("termux-sensor exited with status: {status}");
     }
-}
-
-#[consumes([
-    RequestResponse("face_recognition", FaceRecognitionRequest, FaceRecognitionResponse),
-    Response("happy_face_recognition", FaceRecognitionResponse),
-    Continuous("person_in_frame", PersonFrameData)
-])]
-struct FaceRecognitionProxy;
-
-impl FaceRecognitionProxyContinuosTrait for FaceRecognitionProxy {
-    async fn person_in_frame(data: PersonFrameData) {
-        println!(
-            "Person in frame: ID={}, Distance={}, Sentiment=({:?})",
-            data.person_id, data.distance, data.sentiment
-        );
-    }
-}
-
-async fn provider() {
-    let mut app = Module::new(0, "JustASumService", StdRuntimeContext::new()).await;
-
-    app.register_provider::<FaceRecognition>().await;
 
     app.run_forever().await;
 }
 
-async fn consumer() {
-    let mut app = Module::new(0, "FaceRecognitionProxyApp", StdRuntimeContext::new()).await;
+#[consumes([
+    Continuous("imu_data", IMUData)
+])]
+struct Smartphone;
 
-    let consumer = app.register_consumer::<FaceRecognitionProxy>().await;
-
-    loop {
-        let res = consumer
-            .face_recognition(
-                FaceRecognitionRequest {
-                    model: "dummy".to_string(),
-                    current_status: true,
-                },
-                dust_dds::dcps::infrastructure::time::Duration::new(10, 0),
-            )
-            .await;
-
-        println!("Face recognition response: {:?}", res);
+impl SmartphoneContinuosTrait for Smartphone {
+    async fn imu_data(data: IMUData) {
+        println!("{:?}", data);
     }
+}
+
+async fn consumer() {
+    let mut app = Module::new(0, "SomeAppInRobot", StdRuntimeContext::new()).await;
+
+    let _ = app.register_consumer::<Smartphone>().await;
+
+    app.run_forever().await;
 }
 
 async fn main_async() {

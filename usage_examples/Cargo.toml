@@ -3,8 +3,14 @@ name = "usage_examples"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "face_recognition"
+path = "src/fake_face_recognition.rs"
+
 [dependencies]
 mycelium_computing = { path = "../core", features = ["std_runtime"] }
 dust_dds = { version = "0.15.0" }
 rand = "0.10.0-rc.5"
 smol = "2.0.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"

@@ -1,0 +1,89 @@
+mod example_messages;
+
+use crate::example_messages::face_recognition::*;
+use mycelium_computing::core::module::Module;
+use mycelium_computing::runtimes::StdRuntimeContext;
+use mycelium_computing::{consumes, provides};
+use std::env;
+
+#[provides([
+    RequestResponse("face_recognition", FaceRecognitionRequest, FaceRecognitionResponse),
+    Response("available_models", ModelsInfo),
+    Continuous("person_in_frame", PersonFrameData),
+])]
+struct FaceRecognition;
+
+// Callbacks implementing the provider functionality
+impl FaceRecognitionProviderTrait for FaceRecognition {
+    async fn face_recognition(_input: FaceRecognitionRequest) -> FaceRecognitionResponse {
+        println!("Responding");
+        FaceRecognitionResponse {
+            model: "dummy".to_string(),
+            applied: true,
+            final_status: true,
+        }
+    }
+
+    async fn available_models() -> ModelsInfo {
+        ModelsInfo { models: vec![] }
+    }
+}
+
+#[consumes([
+    RequestResponse("face_recognition", FaceRecognitionRequest, FaceRecognitionResponse),
+    Response("happy_face_recognition", FaceRecognitionResponse),
+    Continuous("person_in_frame", PersonFrameData)
+])]
+struct FaceRecognitionProxy;
+
+impl FaceRecognitionProxyContinuosTrait for FaceRecognitionProxy {
+    async fn person_in_frame(data: PersonFrameData) {
+        println!(
+            "Person in frame: ID={}, Distance={}, Sentiment=({:?})",
+            data.person_id, data.distance, data.sentiment
+        );
+    }
+}
+
+async fn provider() {
+    let mut app = Module::new(0, "JustASumService", StdRuntimeContext::new()).await;
+
+    app.register_provider::<FaceRecognition>().await;
+
+    app.run_forever().await;
+}
+
+async fn consumer() {
+    let mut app = Module::new(0, "FaceRecognitionProxyApp", StdRuntimeContext::new()).await;
+
+    let consumer = app.register_consumer::<FaceRecognitionProxy>().await;
+
+    loop {
+        let res = consumer
+            .face_recognition(
+                FaceRecognitionRequest {
+                    model: "dummy".to_string(),
+                    current_status: true,
+                },
+                dust_dds::dcps::infrastructure::time::Duration::new(10, 0),
+            )
+            .await;
+
+        println!("Face recognition response: {:?}", res);
+    }
+}
+
+async fn main_async() {
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 2 {
+        println!("Using as consumer");
+        consumer().await;
+    } else if args[1] == "provider" {
+        println!("Using as provider");
+        provider().await;
+    }
+}
+
+fn main() {
+    smol::block_on(main_async());
+}

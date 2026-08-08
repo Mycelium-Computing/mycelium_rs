@@ -41,7 +41,7 @@ Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mycelium = { version = "0.0.1", features = ["std_runtime"] }
+mycelium = { version = "0.0.2", features = ["std_runtime"] }
 dust_dds = { version = "0.15.0", default-features = false, features = ["dcps", "rtps"] }
 ```
 

@@ -7,6 +7,6 @@ pub mod core;
 pub mod runtime_context;
 pub mod runtimes;
 pub mod utils;
-pub use mycelium_computing_macros::*;
+pub use mycelium_macros::*;
 
 extern crate self as mycelium;

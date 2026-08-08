@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "mycelium",
-    "macros",
+    "mycelium_macros",
     "tests",
     "benchmarking",
     "usage_examples",

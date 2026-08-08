@@ -16,4 +16,4 @@ std_runtime = [
 async-lock = { version = "3.4.1", default-features = false, optional = true }
 dust_dds = { version = "0.15.0", default-features = false, features = ["dcps", "rtps"] }
 futures = { version = "0.3.31", default-features = false, features = ["alloc"], optional = true }
-mycelium_computing_macros = { path = "../macros" }
+mycelium_macros = { path = "../mycelium_macros" }

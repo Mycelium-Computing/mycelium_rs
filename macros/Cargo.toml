@@ -1,5 +1,5 @@
 [package]
-name = "mycelium-macros"
+name = "mycelium-computing-macros"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -12,6 +12,7 @@ categories = ["development-tools::procedural-macro-helpers"]
 
 [lib]
 proc-macro = true
+name = "mycelium_computing_macros"
 
 [dependencies]
 proc-macro2 = "1.0.103"

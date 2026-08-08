@@ -1,4 +1,4 @@
-# mycelium-macros
+# mycelium-computing-macros
 
 Procedural macros used by [`mycelium`](https://crates.io/crates/mycelium).
 

@@ -19,7 +19,7 @@ repository = "https://github.com/Mycellium-Computing/mycelium_rs"
 
 [workspace.dependencies]
 mycelium = { version = "0.0.1", path = "mycelium" }
-mycelium-macros = { version = "0.0.1", path = "macros" }
+mycelium-computing-macros = { version = "0.0.1", path = "macros" }
 
 [profile.release]
 debug = true

@@ -46,16 +46,16 @@ dust_dds = { version = "0.15.0", default-features = false, features = ["dcps", "
 ```
 
 The `mycelium` package re-exports the procedural macros from the companion
-`mycelium-macros` package, so applications only need to depend on `mycelium`.
+`mycelium-computing-macros` package, so applications only need to depend on `mycelium`.
 
 ### Publishing
 
 The workspace contains the publishable `mycelium` library and its required
-`mycelium-macros` proc-macro package. Publish the macro dependency first, then
+`mycelium-computing-macros` proc-macro package. Publish the macro dependency first, then
 the library:
 
 ```bash
-cargo publish --package mycelium-macros
+cargo publish --package mycelium-computing-macros
 cargo publish --package mycelium
 ```
 

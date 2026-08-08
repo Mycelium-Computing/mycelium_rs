@@ -128,14 +128,14 @@ fn get_create_continuous_handle_impl_tokens(
     if continuous_funcs.is_empty() {
         // No continuous functionalities - return NoContinuousHandle
         return quote! {
-            type ContinuousHandle = mycelium_computing::core::module::provider::NoContinuousHandle;
+            type ContinuousHandle = mycelium::core::module::provider::NoContinuousHandle;
 
             async fn create_continuous_handle(
                 _participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
                 _publisher: &dust_dds::dds_async::publisher::PublisherAsync,
                 _context: &C,
             ) -> Self::ContinuousHandle {
-                mycelium_computing::core::module::provider::NoContinuousHandle
+                mycelium::core::module::provider::NoContinuousHandle
             }
         };
     }
@@ -154,7 +154,7 @@ fn get_create_continuous_handle_impl_tokens(
                 #topic_name,
                 #type_name,
                 dust_dds::infrastructure::qos::QosKind::Default,
-                None::<mycelium_computing::core::listener::NoOpTopicListener>,
+                None::<mycelium::core::listener::NoOpTopicListener>,
                 dust_dds::infrastructure::status::NO_STATUS,
             )
             .await
@@ -171,7 +171,7 @@ fn get_create_continuous_handle_impl_tokens(
             let #writer_var = publisher.create_datawriter::<#output_type>(
                 &#topic_var,
                 dust_dds::infrastructure::qos::QosKind::Default,
-                None::<mycelium_computing::core::listener::NoOpDataWriterListener>,
+                None::<mycelium::core::listener::NoOpDataWriterListener>,
                 dust_dds::infrastructure::status::NO_STATUS,
             )
             .await
@@ -233,7 +233,7 @@ fn get_functionality_message_tokens(functionality: &Functionality) -> proc_macro
     let output_type = &functionality.output_type.to_token_stream().to_string();
 
     quote! {
-        mycelium_computing::core::messages::ProvidedFunctionality {
+        mycelium::core::messages::ProvidedFunctionality {
             name: #name.to_string(),
             input_type: #input_type.to_string(),
             output_type: #output_type.to_string(),
@@ -256,9 +256,9 @@ fn get_functionalities_message_tokens(
     let provider_name = provider_name.to_string();
 
     tokens.extend(quote! {
-        mycelium_computing::core::messages::ProviderMessage {
+        mycelium::core::messages::ProviderMessage {
             provider_name: #provider_name.to_string(),
-            functionalities: mycelium_computing::alloc::vec![
+            functionalities: mycelium::alloc::vec![
                 #(#functionalities_messages),*
             ],
         }
@@ -291,7 +291,7 @@ fn get_functionality_channel_tokens(
     let name_ident = &functionality.name;
     let input_type = if functionality.input_type.is_none() {
         quote::quote! {
-            mycelium_computing::core::messages::EmptyMessage
+            mycelium::core::messages::EmptyMessage
         }
     } else {
         let provider_input_type = functionality.input_type.as_ref().unwrap();
@@ -302,22 +302,22 @@ fn get_functionality_channel_tokens(
     let output_type = &functionality.output_type;
 
     let topic_tokens = quote! {
-        let request_topic = participant.create_topic::<mycelium_computing::core::messages::ProviderExchange<#input_type>>(
+        let request_topic = participant.create_topic::<mycelium::core::messages::ProviderExchange<#input_type>>(
             #topic_req_name,
             #request_topic_type_name,
             dust_dds::infrastructure::qos::QosKind::Default,
-            None::<mycelium_computing::core::listener::NoOpTopicListener>,
+            None::<mycelium::core::listener::NoOpTopicListener>,
             dust_dds::infrastructure::status::NO_STATUS,
         )
             .await
             .unwrap();
 
 
-        let response_topic = participant.create_topic::<mycelium_computing::core::messages::ProviderExchange<#output_type>>(
+        let response_topic = participant.create_topic::<mycelium::core::messages::ProviderExchange<#output_type>>(
             #topic_res_name,
             #response_topic_type_name,
             dust_dds::infrastructure::qos::QosKind::Default,
-            None::<mycelium_computing::core::listener::NoOpTopicListener>,
+            None::<mycelium::core::listener::NoOpTopicListener>,
             dust_dds::infrastructure::status::NO_STATUS,
         )
             .await
@@ -336,10 +336,10 @@ fn get_functionality_channel_tokens(
     };
 
     let writer_tokens = quote! {
-        let writer = publisher.create_datawriter::<mycelium_computing::core::messages::ProviderExchange<#output_type>>(
+        let writer = publisher.create_datawriter::<mycelium::core::messages::ProviderExchange<#output_type>>(
             &response_topic,
-            dust_dds::infrastructure::qos::QosKind::Specific(mycelium_computing::core::qos::reliable_writer_qos()),
-            None::<mycelium_computing::core::listener::NoOpDataWriterListener>,
+            dust_dds::infrastructure::qos::QosKind::Specific(mycelium::core::qos::reliable_writer_qos()),
+            None::<mycelium::core::listener::NoOpDataWriterListener>,
             dust_dds::infrastructure::status::NO_STATUS
         )
             .await
@@ -347,12 +347,12 @@ fn get_functionality_channel_tokens(
     };
 
     let listener_tokens = quote! {
-        let listener = mycelium_computing::core::listener::RequestListener {
+        let listener = mycelium::core::listener::RequestListener {
             writer,
-            implementation: mycelium_computing::alloc::boxed::Box::new(|request: mycelium_computing::core::messages::ProviderExchange<#input_type>| {
-                mycelium_computing::alloc::boxed::Box::pin(async move {
+            implementation: mycelium::alloc::boxed::Box::new(|request: mycelium::core::messages::ProviderExchange<#input_type>| {
+                mycelium::alloc::boxed::Box::pin(async move {
                     let result = #method_call;
-                    mycelium_computing::core::messages::ProviderExchange {
+                    mycelium::core::messages::ProviderExchange {
                         id: request.id,
                         payload: result,
                     }
@@ -365,9 +365,9 @@ fn get_functionality_channel_tokens(
         #listener_tokens
 
 
-        let reader = subscriber.create_datareader::<mycelium_computing::core::messages::ProviderExchange<#input_type>>(
+        let reader = subscriber.create_datareader::<mycelium::core::messages::ProviderExchange<#input_type>>(
             &request_topic,
-            dust_dds::infrastructure::qos::QosKind::Specific(mycelium_computing::core::qos::reliable_reader_qos()),
+            dust_dds::infrastructure::qos::QosKind::Specific(mycelium::core::qos::reliable_reader_qos()),
             Some(listener),
             &[dust_dds::infrastructure::status::StatusKind::DataAvailable]
         )
@@ -426,24 +426,24 @@ fn get_provider_impl_tokens(
         get_create_continuous_handle_impl_tokens(provider_name, functionalities);
 
     quote::quote! {
-        impl<C: mycelium_computing::runtime_context::RuntimeContext>
-            mycelium_computing::core::module::provider::ProviderTrait<C> for #provider_name
+        impl<C: mycelium::runtime_context::RuntimeContext>
+            mycelium::core::module::provider::ProviderTrait<C> for #provider_name
         {
 
             #continuous_handle_impl
 
-            fn get_functionalities() -> mycelium_computing::core::messages::ProviderMessage {
-                use mycelium_computing::alloc::string::ToString;
+            fn get_functionalities() -> mycelium::core::messages::ProviderMessage {
+                use mycelium::alloc::string::ToString;
 
                 #message_tokens
             }
 
             async fn create_execution_objects(
-                functionality_name: mycelium_computing::alloc::string::String,
+                functionality_name: mycelium::alloc::string::String,
                 participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
                 publisher: &dust_dds::dds_async::publisher::PublisherAsync,
                 subscriber: &dust_dds::dds_async::subscriber::SubscriberAsync,
-                storage: &mut mycelium_computing::utils::storage::ExecutionObjects,
+                storage: &mut mycelium::utils::storage::ExecutionObjects,
                 _context: &C,
             ) {
                 #channel_tokens

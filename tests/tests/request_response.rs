@@ -1,5 +1,5 @@
 use dust_dds::infrastructure::type_support::DdsType;
-use mycelium_computing::{consumes, provides};
+use mycelium::{consumes, provides};
 
 #[derive(DdsType)]
 struct ArithmeticRequest {
@@ -36,8 +36,8 @@ mod tests {
     use std::time::Duration;
 
     use futures::FutureExt;
-    use mycelium_computing::core::module::Module;
-    use mycelium_computing::runtimes::StdRuntimeContext;
+    use mycelium::core::module::Module;
+    use mycelium::runtimes::StdRuntimeContext;
     use smol::Timer;
 
     use crate::{

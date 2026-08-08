@@ -2,9 +2,9 @@
 mod example_messages;
 
 use example_messages::imu_sensor::{IMUData, Vector3};
-use mycelium_computing::core::module::Module;
-use mycelium_computing::runtimes::StdRuntimeContext;
-use mycelium_computing::{consumes, provides};
+use mycelium::core::module::Module;
+use mycelium::runtimes::StdRuntimeContext;
+use mycelium::{consumes, provides};
 use serde::Deserialize;
 use std::env;
 use std::io::BufReader;

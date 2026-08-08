@@ -5,9 +5,9 @@ use std::sync::{
 use std::time::Duration;
 
 use dust_dds::infrastructure::type_support::DdsType;
-use mycelium_computing::core::module::Module;
-use mycelium_computing::runtimes::StdRuntimeContext;
-use mycelium_computing::{consumes, provides};
+use mycelium::core::module::Module;
+use mycelium::runtimes::StdRuntimeContext;
+use mycelium::{consumes, provides};
 use serial_test::serial;
 use smol::Timer;
 

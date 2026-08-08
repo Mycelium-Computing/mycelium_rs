@@ -22,7 +22,7 @@ fn get_functionalities_readers_attributes(
                 FunctionalityKind::RequestResponse | FunctionalityKind::Response => {
                     let reader_ident = format_ident!("{}_reader", name.to_string().to_lowercase());
                     Some(quote! {
-                        #reader_ident: dust_dds::dds_async::data_reader::DataReaderAsync< mycelium_computing::core::messages::ProviderExchange<#output_type>>
+                        #reader_ident: dust_dds::dds_async::data_reader::DataReaderAsync< mycelium::core::messages::ProviderExchange<#output_type>>
                     })
                 }
             }
@@ -45,13 +45,13 @@ fn get_functionalities_writers_attributes(
                     let writer_ident = format_ident!("{}_writer", name.to_string().to_lowercase());
                     let input_type = functionality.input_type.as_ref().unwrap();
                     Some(quote! {
-                        #writer_ident: dust_dds::dds_async::data_writer::DataWriterAsync< mycelium_computing::core::messages::ProviderExchange<#input_type>>
+                        #writer_ident: dust_dds::dds_async::data_writer::DataWriterAsync< mycelium::core::messages::ProviderExchange<#input_type>>
                     })
                 }
                 FunctionalityKind::Response => {
                     let writer_ident = format_ident!("{}_writer", name.to_string().to_lowercase());
                     Some(quote! {
-                        #writer_ident: dust_dds::dds_async::data_writer::DataWriterAsync< mycelium_computing::core::messages::ProviderExchange<mycelium_computing::core::messages::EmptyMessage>>
+                        #writer_ident: dust_dds::dds_async::data_writer::DataWriterAsync< mycelium::core::messages::ProviderExchange<mycelium::core::messages::EmptyMessage>>
                     })
                 }
             }
@@ -70,7 +70,7 @@ fn get_functionalities_request_locks_attributes(
                 let name = &functionality.name;
                 let lock_ident = format_ident!("{}_request_lock", name.to_string().to_lowercase());
                 Some(quote! {
-                    #lock_ident: mycelium_computing::runtime_context::MutexOf<C, ()>
+                    #lock_ident: mycelium::runtime_context::MutexOf<C, ()>
                 })
             }
             FunctionalityKind::Continuous => None,
@@ -119,7 +119,7 @@ fn generate_request_response_topics(
     let res_topic_var_ident = format_ident!("{}_res_topic", name.to_string().to_lowercase());
 
     quote! {
-        let #req_topic_var_ident = participant.create_topic::<mycelium_computing::core::messages::ProviderExchange<#request_payload_type>>(
+        let #req_topic_var_ident = participant.create_topic::<mycelium::core::messages::ProviderExchange<#request_payload_type>>(
             #topic_req_name,
             #topic_req_type_name,
             dust_dds::infrastructure::qos::QosKind::Default,
@@ -129,7 +129,7 @@ fn generate_request_response_topics(
         .await
         .unwrap();
 
-        let #res_topic_var_ident = participant.create_topic::<mycelium_computing::core::messages::ProviderExchange<#output_type>>(
+        let #res_topic_var_ident = participant.create_topic::<mycelium::core::messages::ProviderExchange<#output_type>>(
             #topic_res_name,
             #topic_res_type_name,
             dust_dds::infrastructure::qos::QosKind::Default,
@@ -172,7 +172,7 @@ fn get_functionalities_topics_instantiations(
                 FunctionalityKind::Response => generate_request_response_topics(
                     name,
                     output_type,
-                    quote!(mycelium_computing::core::messages::EmptyMessage),
+                    quote!(mycelium::core::messages::EmptyMessage),
                     functionality.input_type.as_ref(),
                 ),
             }
@@ -349,7 +349,7 @@ fn generate_response_wait_logic(
 ) -> proc_macro2::TokenStream {
     quote! {
         use dust_dds::runtime::Timer;
-        use mycelium_computing::runtime_context::{RuntimeContext, RuntimeMutex};
+        use mycelium::runtime_context::{RuntimeContext, RuntimeMutex};
 
         // DataReaderAsync::set_listener replaces the current listener. Keep
         // one request per functionality in flight so a later call cannot
@@ -357,14 +357,14 @@ fn generate_response_wait_logic(
         let _request_guard = self.#request_lock_ident.lock().await;
 
         let match_timeout = core::time::Duration::new(timeout.sec() as u64, timeout.nanosec());
-        if !mycelium_computing::core::qos::wait_for_writer_match::<C, _>(
+        if !mycelium::core::qos::wait_for_writer_match::<C, _>(
             &self.#writer_ident,
             match_timeout,
             self.timer.clone(),
         ).await {
             return None;
         }
-        if !mycelium_computing::core::qos::wait_for_reader_match::<C, _>(
+        if !mycelium::core::qos::wait_for_reader_match::<C, _>(
             &self.#reader_ident,
             match_timeout,
             self.timer.clone(),
@@ -374,7 +374,7 @@ fn generate_response_wait_logic(
 
         let (sender, receiver) = dust_dds::dcps::channels::oneshot::oneshot::<#output_type>();
 
-        let listener = mycelium_computing::core::listener::ProviderResponseListener {
+        let listener = mycelium::core::listener::ProviderResponseListener {
             expected_id: request.id,
             response_sender: Some(sender),
         };
@@ -398,8 +398,8 @@ fn generate_response_wait_logic(
         ));
 
         match C::select(data_future, timer_future).await {
-            mycelium_computing::runtime_context::SelectResult::First(res) => res,
-            mycelium_computing::runtime_context::SelectResult::Second(_) => None,
+            mycelium::runtime_context::SelectResult::First(res) => res,
+            mycelium::runtime_context::SelectResult::Second(_) => None,
         }
     }
 }
@@ -421,8 +421,8 @@ fn generate_request_response_method(
             data: #input_type,
             timeout: dust_dds::infrastructure::time::Duration,
         ) -> Option<#output_type> {
-            let request = mycelium_computing::core::messages::ProviderExchange {
-                id: mycelium_computing::utils::next_request_id(
+            let request = mycelium::core::messages::ProviderExchange {
+                id: mycelium::utils::next_request_id(
                     self.#reader_ident.get_instance_handle().await,
                 ),
                 payload: data,
@@ -448,11 +448,11 @@ fn generate_response_method(
             &self,
             timeout: dust_dds::infrastructure::time::Duration,
         ) -> Option<#output_type> {
-            let request = mycelium_computing::core::messages::ProviderExchange {
-                id: mycelium_computing::utils::next_request_id(
+            let request = mycelium::core::messages::ProviderExchange {
+                id: mycelium::utils::next_request_id(
                     self.#reader_ident.get_instance_handle().await,
                 ),
-                payload: mycelium_computing::core::messages::EmptyMessage::default(),
+                payload: mycelium::core::messages::EmptyMessage::default(),
             };
 
             #wait_logic
@@ -510,7 +510,7 @@ fn get_functionalities_trait_implementations(
     });
 
     vec![quote! {
-        impl<C: mycelium_computing::runtime_context::RuntimeContext>
+        impl<C: mycelium::runtime_context::RuntimeContext>
             #trait_name for #consumer_struct<C>
         {
             #(#methods)*
@@ -534,13 +534,13 @@ fn get_consumer_struct<'a>(
         .chain(request_locks_attributes)
         .collect();
     all_attributes.push(quote! {
-        timer: mycelium_computing::runtime_context::TimerHandleOf<C>
+        timer: mycelium::runtime_context::TimerHandleOf<C>
     });
 
     (
         consumer_struct.clone(),
         quote::quote! {
-            struct #consumer_struct<C: mycelium_computing::runtime_context::RuntimeContext> {
+            struct #consumer_struct<C: mycelium::runtime_context::RuntimeContext> {
                 #(#all_attributes),*
             }
         },
@@ -559,14 +559,14 @@ fn get_init_body_writers(funtionalities: &Functionalities) -> Vec<proc_macro2::T
                     let t = f.input_type.as_ref().unwrap();
                     quote!(#t)
                 } else {
-                    quote!(mycelium_computing::core::messages::EmptyMessage)
+                    quote!(mycelium::core::messages::EmptyMessage)
                 };
 
                 Some(quote! {
                     let #writer_ident = publisher
-                        .create_datawriter::<mycelium_computing::core::messages::ProviderExchange<#input_type>>(
+                        .create_datawriter::<mycelium::core::messages::ProviderExchange<#input_type>>(
                             &#req_topic_var_ident,
-                            dust_dds::infrastructure::qos::QosKind::Specific(mycelium_computing::core::qos::reliable_writer_qos()),
+                            dust_dds::infrastructure::qos::QosKind::Specific(mycelium::core::qos::reliable_writer_qos()),
                             dust_dds::listener::NO_LISTENER,
                             dust_dds::infrastructure::status::NO_STATUS,
                         )
@@ -592,9 +592,9 @@ fn get_init_body_readers(functionalities: &Functionalities) -> Vec<proc_macro2::
 
                 Some(quote! {
                     let #reader_ident = subscriber
-                        .create_datareader::<mycelium_computing::core::messages::ProviderExchange<#output_type>>(
+                        .create_datareader::<mycelium::core::messages::ProviderExchange<#output_type>>(
                             &#res_topic_var_ident,
-                            dust_dds::infrastructure::qos::QosKind::Specific(mycelium_computing::core::qos::reliable_reader_qos()),
+                            dust_dds::infrastructure::qos::QosKind::Specific(mycelium::core::qos::reliable_reader_qos()),
                             dust_dds::listener::NO_LISTENER,
                             dust_dds::infrastructure::status::NO_STATUS,
                         )
@@ -686,7 +686,7 @@ fn get_consumer_trait_impl(
             let output_type_str = quote!(#output_type).to_string();
 
             quote! {
-                mycelium_computing::core::messages::ProvidedFunctionality {
+                mycelium::core::messages::ProvidedFunctionality {
                     name: #name_str.to_string(),
                     input_type: #input_type_str.to_string(),
                     output_type: #output_type_str.to_string(),
@@ -702,21 +702,21 @@ fn get_consumer_trait_impl(
     let struct_init_fields = get_struct_init_fields(functionalities);
 
     quote! {
-        impl<C: mycelium_computing::runtime_context::RuntimeContext>
-            mycelium_computing::core::module::consumer::ConsumerTrait<C> for #struct_name
+        impl<C: mycelium::runtime_context::RuntimeContext>
+            mycelium::core::module::consumer::ConsumerTrait<C> for #struct_name
         {
             type Handle = #consumer_struct_name<C>;
 
-            fn get_consumer_id() -> mycelium_computing::alloc::string::String {
-                use mycelium_computing::alloc::string::ToString;
+            fn get_consumer_id() -> mycelium::alloc::string::String {
+                use mycelium::alloc::string::ToString;
 
                 #struct_name_str.to_string()
             }
 
-            fn get_requested_functionalities() -> mycelium_computing::alloc::vec::Vec<mycelium_computing::core::messages::ProvidedFunctionality> {
-                use mycelium_computing::alloc::string::ToString;
+            fn get_requested_functionalities() -> mycelium::alloc::vec::Vec<mycelium::core::messages::ProvidedFunctionality> {
+                use mycelium::alloc::string::ToString;
 
-                mycelium_computing::alloc::vec![#(#functionality_definitions),*]
+                mycelium::alloc::vec![#(#functionality_definitions),*]
             }
 
             async fn create_handle(
@@ -725,7 +725,7 @@ fn get_consumer_trait_impl(
                 subscriber: &dust_dds::dds_async::subscriber::SubscriberAsync,
                 context: &C,
             ) -> Self::Handle {
-                use mycelium_computing::runtime_context::RuntimeContext;
+                use mycelium::runtime_context::RuntimeContext;
 
                 #(#data_topics_instantiations)*
 
@@ -755,13 +755,13 @@ fn get_consumer_struct_impl(
 
     quote! {
         impl #struct_name {
-            async fn init<C: mycelium_computing::runtime_context::RuntimeContext>(
+            async fn init<C: mycelium::runtime_context::RuntimeContext>(
                 participant: &dust_dds::dds_async::domain_participant::DomainParticipantAsync,
                 subscriber: &dust_dds::dds_async::subscriber::SubscriberAsync,
                 publisher: &dust_dds::dds_async::publisher::PublisherAsync,
                 context: &C,
             ) -> #consumer_struct_name<C> {
-                use mycelium_computing::runtime_context::RuntimeContext;
+                use mycelium::runtime_context::RuntimeContext;
 
                 #(#data_topics_instantiations)*
 

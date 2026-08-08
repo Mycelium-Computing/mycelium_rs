@@ -21,7 +21,7 @@ Mycelium Computing enables developers to create distributed systems with minimal
 
 ```
 modular_architecture/
-├── core/                    # Main library (mycelium_computing)
+├── mycelium/                    # Main library (mycelium)
 │   └── src/
 │       ├── core/           # Module, listeners, and messages
 │       └── utils/          # Utilities (ID generator, storage)
@@ -41,7 +41,7 @@ Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mycelium_computing = { path = "path/to/core", features = ["std_runtime"] }
+mycelium = { path = "path/to/core", features = ["std_runtime"] }
 dust_dds = { version = "0.15.0", default-features = false, features = ["dcps", "rtps"] }
 ```
 
@@ -71,7 +71,7 @@ pub struct Number {
 Use the `#[provides]` macro to define a service provider:
 
 ```rust
-use mycelium_computing::provides;
+use mycelium::provides;
 
 #[provides([
     RequestResponse("add_two_ints", ArithmeticRequest, Number),
@@ -94,7 +94,7 @@ impl CalculatorProviderProviderTrait for CalculatorProvider {
 Use the `#[consumes]` macro to define a service consumer:
 
 ```rust
-use mycelium_computing::consumes;
+use mycelium::consumes;
 
 #[consumes([
     RequestResponse("add_two_ints", ArithmeticRequest, Number),
@@ -118,8 +118,8 @@ For the standard runtime, construct the module with `StdRuntimeContext::new()`.
 **Provider Module:**
 
 ```rust
-use mycelium_computing::core::module::Module;
-use mycelium_computing::runtimes::StdRuntimeContext;
+use mycelium::core::module::Module;
+use mycelium::runtimes::StdRuntimeContext;
 
 async fn run_provider() {
     let mut app = Module::new(
@@ -143,8 +143,8 @@ async fn run_provider() {
 **Consumer Module:**
 
 ```rust
-use mycelium_computing::core::module::Module;
-use mycelium_computing::runtimes::StdRuntimeContext;
+use mycelium::core::module::Module;
+use mycelium::runtimes::StdRuntimeContext;
 
 async fn run_consumer() {
     let mut app = Module::new(

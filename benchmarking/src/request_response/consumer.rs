@@ -1,7 +1,7 @@
 use dust_dds::infrastructure::time::Duration;
-use mycelium_computing::consumes;
-use mycelium_computing::core::module::Module;
-use mycelium_computing::runtimes::StdRuntimeContext;
+use mycelium::consumes;
+use mycelium::core::module::Module;
+use mycelium::runtimes::StdRuntimeContext;
 
 use crate::common::types::{MathRequest, MathResult};
 

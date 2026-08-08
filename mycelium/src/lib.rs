@@ -9,4 +9,4 @@ pub mod runtimes;
 pub mod utils;
 pub use mycelium_computing_macros::*;
 
-extern crate self as mycelium_computing;
+extern crate self as mycelium;

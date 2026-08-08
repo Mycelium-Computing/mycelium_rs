@@ -1,7 +1,14 @@
 [package]
 name = "mycelium"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "A runtime-agnostic DDS framework for modular distributed Rust applications."
+keywords = ["dds", "distributed", "async", "middleware"]
+categories = ["asynchronous", "network-programming"]
 
 [features]
 default = []
@@ -16,4 +23,4 @@ std_runtime = [
 async-lock = { version = "3.4.1", default-features = false, optional = true }
 dust_dds = { version = "0.15.0", default-features = false, features = ["dcps", "rtps"] }
 futures = { version = "0.3.31", default-features = false, features = ["alloc"], optional = true }
-mycelium_macros = { path = "../mycelium_macros" }
+mycelium-macros = { workspace = true }

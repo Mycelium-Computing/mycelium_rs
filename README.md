@@ -41,9 +41,28 @@ Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mycelium = { path = "path/to/core", features = ["std_runtime"] }
+mycelium = { version = "0.0.1", features = ["std_runtime"] }
 dust_dds = { version = "0.15.0", default-features = false, features = ["dcps", "rtps"] }
 ```
+
+The `mycelium` package re-exports the procedural macros from the companion
+`mycelium-macros` package, so applications only need to depend on `mycelium`.
+
+### Publishing
+
+The workspace contains the publishable `mycelium` library and its required
+`mycelium-macros` proc-macro package. Publish the macro dependency first, then
+the library:
+
+```bash
+cargo publish --package mycelium-macros
+cargo publish --package mycelium
+```
+
+Use `--dry-run` with either command to validate a package without uploading it.
+
+Crates.io names are globally allocated. The `mycelium` name must be available
+or belong to your account before the final publish can succeed.
 
 ## Quick Start
 
@@ -252,7 +271,7 @@ cargo run --bin continuous_consumer
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ```
-Copyright 2025 Juan David Guevara Arévalo
+Copyright 2026 Juan David Guevara Arévalo
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

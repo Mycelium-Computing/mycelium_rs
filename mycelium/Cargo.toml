@@ -1,5 +1,5 @@
 [package]
-name = "mycelium"
+name = "mycelium-computing"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -8,7 +8,10 @@ repository.workspace = true
 readme = "README.md"
 description = "A runtime-agnostic DDS framework for modular distributed Rust applications."
 keywords = ["dds", "distributed", "async", "middleware"]
-categories = ["asynchronous", "network-programming"]
+categories = ["asynchronous", "network-programming", "robotics"]
+
+[lib]
+name = "mycelium"
 
 [features]
 default = []
